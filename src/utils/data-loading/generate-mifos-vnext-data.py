@@ -279,11 +279,16 @@ def create_client(headers, locale, tenant_id):
         seed_str = f"{tenant_id}-{count}"
         seed = int(hashlib.sha256(seed_str.encode()).hexdigest(), 16) % (10 ** 8)
         rng = random.Random(seed)
+        # Use deterministic indices based on seed to ensure unique names
+        firstname_idx = seed % len(FIRST_NAMES)
+        lastname_idx = (seed // len(FIRST_NAMES)) % len(LAST_NAMES)
+        firstname = FIRST_NAMES[firstname_idx]
+        lastname = LAST_NAMES[lastname_idx]
     else:
         rng = random.Random()
+        firstname = rng.choice(FIRST_NAMES)
+        lastname = rng.choice(LAST_NAMES)
 
-    firstname = rng.choice(FIRST_NAMES)
-    lastname = rng.choice(LAST_NAMES)
     full_name = f"{firstname} {lastname}"
 
     submitted_date = datetime.datetime.now().strftime(DATE_FORMAT)
@@ -620,17 +625,30 @@ if __name__ == "__main__":
     #global _deterministic_mode
     _deterministic_mode = not args.random
     if _deterministic_mode:
-        random.seed(42)
-        shuffle_numbers = False
+        # Use deterministic but unique MSISDNs per tenant
+        # Generate MSISDNs with tenant-specific prefixes to ensure uniqueness
+        unique_mobile_numbers = []
+        tenant_prefixes = {
+            'greenbank': '0413',  # 0413xxxxxx for greenbank
+            'redbank': '0423',    # 0423xxxxxx for redbank
+            'bluebank': '0495'    # 0495xxxxxx for bluebank
+        }
+        for tenant_id, num_clients in TENANTS.items():
+            prefix = tenant_prefixes.get(tenant_id, '0400')
+            # Use tenant-specific seed for deterministic but unique numbers
+            tenant_seed = int(hashlib.sha256(tenant_id.encode()).hexdigest(), 16) % (10 ** 8)
+            tenant_rng = random.Random(tenant_seed)
+            for i in range(num_clients):
+                # Generate 6-digit suffix (000000-999999)
+                suffix = tenant_rng.randint(100000, 999999)
+                unique_mobile_numbers.append(f"{prefix}{suffix}")
     else:
-        random.seed()          # OS entropy / time
-        shuffle_numbers = True
-
-    total_clients = sum(TENANTS.values())
-    unique_mobile_numbers = [
-        f"04{random.randint(10000000, 99999999)}" for _ in range(total_clients)
-    ]
-    if shuffle_numbers:
+        # Random mode - generate random MSISDNs
+        random.seed()
+        total_clients = sum(TENANTS.values())
+        unique_mobile_numbers = [
+            f"04{random.randint(10000000, 99999999)}" for _ in range(total_clients)
+        ]
         random.shuffle(unique_mobile_numbers)
 
     # ----- process each tenant -----

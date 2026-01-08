@@ -17,8 +17,8 @@ function usage() {
 cat <<EOF
 Usage: $0 [-f <config_file>] [-p <payer_msisdn>] [-r <payee_msisdn>] [-t <tenant_id>] [-d <payee_dfsp_id>] [-v]
  -c Path to config.ini file (default: ../config/config.ini) [optional]
- -p Payer MSISDN (default: 0413356886) [optional]
- -r Payee MSISDN (default: 0495822412) [optional]
+ -p Payer MSISDN (default: 0413509790 - greenbank client 1) [optional]
+ -r Payee MSISDN (default: 0495492927 - bluebank client 1) [optional]
  -t Platform-TenantId (default: greenbank) [optional]
  -d X-PayeeDFSP-ID (default: bluebank) [optional]
  -v Enable debug/verbose mode [optional]
@@ -105,8 +105,8 @@ default_config_dir="$( cd $(dirname "$SCRIPT_DIR")/../config ; pwd )"
 default_config_ini="$default_config_dir/config.ini"
 config_ini=""  # Will be set after parsing options
 
-payer_msisdn="0413356886"
-payee_msisdn="0495822412"
+payer_msisdn="0413509790"  # Deterministic greenbank client 1 (matches generate-mifos-vnext-data.py)
+payee_msisdn="0495492927"  # Deterministic bluebank client 1 (matches generate-mifos-vnext-data.py)
 tenant_id="greenbank"
 payee_dfsp_id="bluebank"
 debug=false
