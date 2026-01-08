@@ -67,22 +67,22 @@ function lookup_client_name() {
         return 1
     fi
     
-    # Parse JSON to extract display name - try multiple approaches
-    local display_name
-    
-    # Method 1: Look for displayName in pageItems array
-    display_name=$(echo "$response" | grep -o '"displayName":"[^"]*"' | head -n1 | sed 's/"displayName":"\([^"]*\)"/\1/')
-    
-    # Method 2: If that fails, try looking for firstname and lastname
+    # Parse JSON to extract display name
+    # The API returns clients in pageItems array, find the one matching our MSISDN
+    local display_name=""
+
+    # Extract the client object matching our MSISDN
+    # Look for displayName that appears before the matching mobileNo
+    local json_section=""
+    json_section=$(echo "$response" | grep -o "\"displayName\":\"[^\"]*\"[^}]*\"mobileNo\":\"$msisdn\"" | head -n1 || echo "")
+
+    if [[ -n "$json_section" ]]; then
+        display_name=$(echo "$json_section" | grep -o '"displayName":"[^"]*"' | sed 's/"displayName":"\([^"]*\)"/\1/')
+    fi
+
+    # If that didn't work, fall back to the first displayName (for backward compatibility)
     if [[ -z "$display_name" ]]; then
-        local firstname lastname
-        firstname=$(echo "$response" | grep -o '"firstname":"[^"]*"' | head -n1 | sed 's/"firstname":"\([^"]*\)"/\1/')
-        lastname=$(echo "$response" | grep -o '"lastname":"[^"]*"' | head -n1 | sed 's/"lastname":"\([^"]*\)"/\1/')
-        if [[ -n "$firstname" ]] && [[ -n "$lastname" ]]; then
-            display_name="$firstname $lastname"
-        elif [[ -n "$firstname" ]]; then
-            display_name="$firstname"
-        fi
+        display_name=$(echo "$response" | grep -o '"displayName":"[^"]*"' | head -n1 | sed 's/"displayName":"\([^"]*\)"/\1/')
     fi
     
     if [[ "$debug" == true ]]; then
