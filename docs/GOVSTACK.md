@@ -182,14 +182,41 @@ connector-bulk → POST back to bulk-processor (recursive batch)
 - Selects which connector/workflow to use
 - Independent of validation
 
+### The debulkingDfspid Configuration
+
+**Location:** [ph-ee-bulk-processor/src/main/resources/application.yaml](/home/tdaly/ph-ee-bulk-processor/src/main/resources/application.yaml)
+
+The `debulkingDfspid` field in payment-mode configuration controls which tenant handles closedloop transfers:
+
+```yaml
+payment-modes:
+  - id: "CLOSEDLOOP"
+    type: "BULK"
+    endpoint: "bulk_connector_{MODE}-{dfspid}"
+    # debulkingDfspid: "greenbank"  # ❌ DO NOT hardcode - overrides tenant selection
+```
+
+**How it works:**
+- When `debulkingDfspid` is specified, it becomes the `Platform-TenantId` header sent to channel-connector
+- When `debulkingDfspid` is null/undefined, it defaults to the submitting tenant (correct behavior)
+- Hardcoding this value causes ALL closedloop batches to use the same tenant workflows, regardless of `--tenant` flag
+
+**Code reference:** [InitSubBatchRoute.java:128](/home/tdaly/ph-ee-bulk-processor/src/main/java/org/mifos/processor/bulk/camel/routes/InitSubBatchRoute.java#L128)
+```java
+variables.put(DEBULKINGDFSPID,
+    mapping.getDebulkingDfspid() == null ? tenantName : mapping.getDebulkingDfspid());
+```
+
 ### Valid Combinations
 
 | --govstack flag | payment_mode | Tenant | Workflow | Use Case | Status |
 |-----------------|--------------|--------|----------|----------|--------|
-| NO | CLOSEDLOOP | redbank | minimal_mock_fund_transfer | Simple testing, single Payment Hub | ✅ WORKS |
-| NO | MOJALOOP | greenbank | PayerFundTransfer | Multi-FSP via switch, no validation | ✅ WORKS |
-| YES | CLOSEDLOOP | any | account_lookup → minimal_mock | G2P with validation, no switch | ⚠️ PARTIAL (see notes) |
-| **YES** | MOJALOOP | greenbank | account_lookup → PayerFundTransfer | **TRUE GOVSTACK** - G2P via switch | ✅ **RECOMMENDED** |
+| NO | CLOSEDLOOP | redbank | minimal_mock_fund_transfer-redbank | Simple testing, single Payment Hub | ✅ WORKS |
+| NO | MOJALOOP | greenbank | PayerFundTransfer-greenbank | Multi-FSP via switch, no validation | ✅ WORKS |
+| YES | CLOSEDLOOP | any | account_lookup → minimal_mock-{tenant} | G2P with validation, no switch | ⚠️ PARTIAL (see notes) |
+| **YES** | MOJALOOP | greenbank | account_lookup → PayerFundTransfer-greenbank | **TRUE GOVSTACK** - G2P via switch | ✅ **RECOMMENDED** |
+
+**Note:** The workflow suffix changes based on tenant (e.g., `-greenbank`, `-redbank`). If you see the wrong tenant suffix in logs, check that `debulkingDfspid` is not hardcoded in the payment-mode configuration.
 
 ---
 
@@ -290,39 +317,34 @@ MSISDN: 0424942603 → fspId: "bluebank", currency: "USD"
 
 ## Tenant Configuration
 
-### Connector-Channel Tenant Workflows
+### Critical: Multi-Component Tenant Configuration
 
-**File:** [repos/ph_template/helm/gazelle/config/application-tenants.properties](/home/tdaly/mifos-gazelle/repos/ph_template/helm/gazelle/config/application-tenants.properties)
+**IMPORTANT:** Tenant workflows must be configured in BOTH bulk-processor AND channel-connector for batch processing to work correctly.
 
-```properties
-# Greenbank - Payer using Mojaloop switch
-bpmns.tenants[0].id=greenbank
-bpmns.tenants[0].flows.payment-transfer=PayerFundTransfer-{dfspid}
-bpmns.tenants[0].flows.outbound-transfer-request={ps}_flow_{ams}-{dfspid}
-
-# Redbank - Payer using closedloop (direct Fineract)
-bpmns.tenants[1].id=redbank
-bpmns.tenants[1].flows.payment-transfer=minimal_mock_fund_transfer-{dfspid}
-bpmns.tenants[1].flows.outbound-transfer-request=minimal_mock_transfer_request-{dfspid}
-
-# Bluebank - Payee FSP (receives funds)
-bpmns.tenants[2].id=bluebank
-bpmns.tenants[2].flows.payment-transfer=minimal_mock_fund_transfer-{dfspid}
-```
-
-**Key Point:** The `payment-transfer` workflow is determined by the **payer tenant**, not the payment mode in the CSV.
-
-### Bulk-Processor Tenant Workflows
+### Bulk-Processor Configuration
 
 **File:** [ph-ee-bulk-processor/src/main/resources/application.yaml](/home/tdaly/ph-ee-bulk-processor/src/main/resources/application.yaml)
 
+- Requires tenant in both the `tenants:` list AND `bpmns.tenants[]` section
+- Controls batch-transactions workflow selection
+- Uses `@ConfigurationProperties` annotation - reads YAML, NOT .properties files
+
 ```yaml
+# Line 74: Add tenant to list
+tenants: "greenbank, bluebank, redbank"
+
+# Lines 232+: Define tenant workflows
 bpmns:
   tenants:
     - id: "greenbank"
       flows:
+        payment-transfer: "minimal_mock_fund_transfer-{dfspid}"
         batch-transactions: "bulk_processor-{dfspid}"
     - id: "redbank"
+      flows:
+        payment-transfer: "minimal_mock_fund_transfer-{dfspid}"
+        batch-transactions: "bulk_processor-{dfspid}"
+    - id: "bluebank"
       flows:
         batch-transactions: "bulk_processor-{dfspid}"
 ```
@@ -333,6 +355,74 @@ bpmns:
       flows:
         batch-transactions: "bulk_processor_account_lookup-{dfspid}"
 ```
+
+### Connector-Channel Configuration
+
+**File:** [ph-ee-connector-channel/src/main/resources/application.yml](/home/tdaly/ph-ee-connector-channel/src/main/resources/application.yml)
+
+- Controls payment-transfer workflow selection
+- Must match bulk-processor tenant definitions
+
+```yaml
+bpmns:
+  tenants:
+    - id: "greenbank"
+      flows:
+        payment-transfer: "PayerFundTransfer-{dfspid}"
+        outbound-transfer-request: "{ps}_flow_{ams}-{dfspid}"
+    - id: "redbank"
+      flows:
+        payment-transfer: "minimal_mock_fund_transfer-{dfspid}"
+        outbound-transfer-request: "minimal_mock_transfer_request-{dfspid}"
+    - id: "bluebank"
+      flows:
+        payment-transfer: "minimal_mock_fund_transfer-{dfspid}"
+        outbound-transfer-request: "minimal_mock_transfer_request-{dfspid}"
+```
+
+**Key Point:** The `payment-transfer` workflow is determined by the **payer tenant**, not the payment mode in the CSV.
+
+### Helm Template Configuration (For Reference)
+
+**File:** [repos/ph_template/helm/gazelle/config/application-tenants.properties](/home/tdaly/mifos-gazelle/repos/ph_template/helm/gazelle/config/application-tenants.properties)
+
+This file is used by Helm templates for deployment, but when using hostpath mounts, the actual configuration comes from the source YAML files above.
+
+```properties
+# Greenbank - Payer using Mojaloop switch
+bpmns.tenants[0].id=greenbank
+bpmns.tenants[0].flows.payment-transfer=PayerFundTransfer-{dfspid}
+bpmns.tenants[0].flows.outbound-transfer-request={ps}_flow_{ams}-{dfspid}
+bpmns.tenants[0].flows.batch-transactions=bulk_processor-{dfspid}
+
+# Redbank - Payer using closedloop (direct Fineract => minimal_mock_transfer_request)
+bpmns.tenants[1].id=redbank
+bpmns.tenants[1].flows.payment-transfer=minimal_mock_fund_transfer-{dfspid}
+bpmns.tenants[1].flows.outbound-transfer-request=minimal_mock_transfer_request-{dfspid}
+bpmns.tenants[1].flows.batch-transactions=bulk_processor-{dfspid}
+
+# Bluebank - Payee FSP (receives funds)
+bpmns.tenants[2].id=bluebank
+bpmns.tenants[2].flows.payment-transfer=minimal_mock_fund_transfer-{dfspid}
+bpmns.tenants[2].flows.batch-transactions=bulk_processor-{dfspid}
+```
+
+### Deployment with Hostpath Mounts
+
+When using hostpath mounts (development mode):
+1. Edit source YAML files in `~/ph-ee-bulk-processor/src/main/resources/application.yaml` and `~/ph-ee-connector-channel/src/main/resources/application.yml`
+2. Rebuild JARs:
+   ```bash
+   cd ~/ph-ee-bulk-processor && ./gradlew clean build -x test
+   cd ~/ph-ee-connector-channel && ./gradlew clean build -x test
+   ```
+3. Restart pods:
+   ```bash
+   kubectl delete pod -n paymenthub -l app=ph-ee-bulk-processor
+   kubectl delete pod -n paymenthub -l app=ph-ee-connector-channel
+   ```
+
+**Note:** ConfigMap updates alone do NOT work with hostpath mounts - the JARs must be rebuilt.
 
 ### Workflow Selection Logic
 
@@ -536,6 +626,15 @@ kubectl logs -n paymenthub -l app=ph-ee-identity-account-mapper --tail=50
 | No sub-batches created | Not using account_lookup workflow | Check tenant batch-transactions config |
 | Wrong workflow used | Tenant mismatch | Verify `--tenant` matches your intent (greenbank/redbank) |
 | CSV payer mismatch | Using wrong CSV for tenant | Regenerate CSVs with `generate-example-csv-files.py` |
+
+### Tenant Configuration Issues
+
+| Symptom | Likely Cause | Solution |
+|---------|--------------|----------|
+| "Process definition not found" (412 error) | Tenant missing from bpmns.tenants[] in bulk-processor | Add tenant to `~/ph-ee-bulk-processor/src/main/resources/application.yaml`, rebuild JAR |
+| PARTY_NOT_FOUND errors | Tenant missing from channel-connector config | Add tenant to `~/ph-ee-connector-channel/src/main/resources/application.yml`, rebuild JAR |
+| Wrong workflow triggered despite correct tenant | Hardcoded debulkingDfspid in payment-mode config | Remove debulkingDfspid from CLOSEDLOOP payment-mode in bulk-processor application.yaml |
+| Changes not taking effect | Using hostpath mounts | Rebuild JAR files and restart pods after config changes |
 
 ### Verifying Configuration
 

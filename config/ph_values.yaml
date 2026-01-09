@@ -23,8 +23,8 @@ ph-ee-engine:
       PH_ACT_BACKEND_SERVER_URL: https://ops-bk.mifos.gazelle.localhost/api/v1
       PH_OPS_BULK_CONNECTOR_URL: https://bulk-processor.mifos.gazelle.localhost
       PH_OPS_SIGNATURE_URL: https://ops.mifos.gazelle.localhost/api/v1/util/x-signature
-      PH_PLATFORM_TENANT_ID: greenbank
-      PH_PLATFORM_TENANT_IDS: "greenbank,bluebank"
+      PH_PLATFORM_TENANT_ID: redbank
+      PH_PLATFORM_TENANT_IDS: "greenbank,bluebank,redbank"
       PH_REGISTERING_INSTITUTION_ID: 123
 
   operations_app:
@@ -320,7 +320,7 @@ ph-ee-engine:
     image: docker.io/openmf/ph-ee-bulk-processor:v1.12.1-gazelle-1.1.0
     imagePullPolicy: IfNotPresent
     camel_disable_ssl: false  # End-to-end TLS
-    tenants: "greenbank,bluebank"
+    tenants: "greenbank,bluebank,redbank"
     operations_app:
       contactpoint: "http://ph-ee-operations-app:80"
       endpoints:
