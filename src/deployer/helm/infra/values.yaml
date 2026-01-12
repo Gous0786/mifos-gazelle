@@ -145,6 +145,8 @@ kafka:
         value: SecurityBcAuthorizationEvents
       - name: SecurityBcEvents
         value: SecurityBcEvents
+      - name: zeebe-export
+        value: zeebe-export
 
     nodeSelector: {}
     tolerations: []
