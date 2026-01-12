@@ -37,7 +37,7 @@ def get_gazelle_domain(cfg):
 # Mifos API
 # ----------------------------------------------------------------------
 AUTH_HEADER_VALUE = "Basic bWlmb3M6cGFzc3dvcmQ="  # mifos:password
-TENANTS = ["bluebank", "greenbank"]
+TENANTS = ["bluebank", "greenbank", "redbank"]
 
 def make_request(url, headers):
     """Make API request with error handling."""

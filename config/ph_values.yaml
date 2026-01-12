@@ -17,15 +17,32 @@ ph-ee-engine:
   operations_web:
     enabled: true
     image: docker.io/openmf/ph-ee-operations-web:gazelle-v1.1.0
+    # Use nginx image with hostPath for local development
+    # image: nginx:alpine
     backend:
       PH_OPS_BACKEND_SERVER_URL: https://ops-bk.mifos.gazelle.localhost/api/v1
       PH_VOU_BACKEND_SERVER_URL: https://ops-bk.mifos.gazelle.localhost/api/v1
       PH_ACT_BACKEND_SERVER_URL: https://ops-bk.mifos.gazelle.localhost/api/v1
       PH_OPS_BULK_CONNECTOR_URL: https://bulk-processor.mifos.gazelle.localhost
       PH_OPS_SIGNATURE_URL: https://ops.mifos.gazelle.localhost/api/v1/util/x-signature
-      PH_PLATFORM_TENANT_ID: redbank
+      PH_PLATFORM_TENANT_ID: greenbank
       PH_PLATFORM_TENANT_IDS: "greenbank,bluebank,redbank"
       PH_REGISTERING_INSTITUTION_ID: 123
+    deployment:
+      extraVolumeMounts:
+        - name: nginx-spa-config
+          mountPath: /etc/nginx/conf.d/default.conf
+          subPath: default.conf
+        - name: ops-web-dist
+          mountPath: /usr/share/nginx/html
+      extraVolumes:
+        - name: nginx-spa-config
+          configMap:
+            name: nginx-spa-config
+        - name: ops-web-dist
+          hostPath:
+            path: /home/tdaly/ph-ee-operations-web/dist/web-app
+            type: Directory
 
   operations_app:
     enabled: true
@@ -70,8 +87,9 @@ ph-ee-engine:
         nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
         nginx.ingress.kubernetes.io/enable-cors: "true"
         nginx.ingress.kubernetes.io/cors-allow-origin: "https://ops.mifos.gazelle.localhost"
-        nginx.ingress.kubernetes.io/cors-allow-methods: "PUT, GET, POST, OPTIONS, DELETE"
-        nginx.ingress.kubernetes.io/cors-allow-headers: "content-type,platform-tenantid,purpose,type,x-callback-url,x-correlationid,x-correlation-id,x-program-id,x-registering-institution-id,x-signature"
+        nginx.ingress.kubernetes.io/cors-allow-methods: "PUT, GET, POST, OPTIONS, DELETE, PATCH"
+        nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,Platform-TenantId,platform-tenantid,purpose,type,x-callback-url,x-correlationid,x-correlation-id,X-Correlation-ID,x-program-id,x-registering-institution-id,x-signature"
+        nginx.ingress.kubernetes.io/cors-expose-headers: "Content-Length,Content-Range,X-Correlation-ID,x-correlation-id"
         nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
         nginx.ingress.kubernetes.io/enable-access-log: "true"
         nginx.ingress.kubernetes.io/log-format: '$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" "$http_x_forwarded_for" $request_uri'
@@ -568,4 +586,3 @@ ph-ee-engine:
     #       value: "DEBUG"
         # For debugging keystore loading issues when running from hostpath mounted code
         # - name: AMS_LOCAL_KEYSTORE_PATH
-        #   value: "/app/keystore.jks"

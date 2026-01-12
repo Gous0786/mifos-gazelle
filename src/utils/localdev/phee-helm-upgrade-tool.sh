@@ -2,6 +2,8 @@
 # This script is a utility for local development of Paymenthub EE Helm charts.
 # It automates the process of cleaning and rebuilding the Helm charts
 # for Gazelle (parent chart) and ph-ee-engine (subchart).
+# Note: this is not really needed , but is just a convenience tool to save having to cd to the ph-ee-engine chart and run 
+#       helm dependency build or update and then repeat the same thing for the gazelle chart
 #
 # Usage:
 #   ./phee-helm-upgrade-tool.sh
