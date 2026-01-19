@@ -25,7 +25,7 @@ def load_config(config_path):
 def get_gazelle_domain(config):
     """Extract Gazelle domain from config."""
     try:
-        return config['gazelle']['domain']
+        return config['general']['GAZELLE_DOMAIN']
     except KeyError:
         return 'mifos.gazelle.localhost'
 
