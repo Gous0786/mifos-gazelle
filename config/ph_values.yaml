@@ -224,7 +224,7 @@ ph-ee-engine:
       deployment:
       extraEnv:
         - name: JAVA_TOOL_OPTIONS
-          value: "-Xms64m -Xmx256m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+          value: "-Xms64m -Xmx256m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:+HeapDumpOnOutOfMemoryError"
           
       resources:
         requests:
@@ -309,7 +309,7 @@ ph-ee-engine:
     deployment:
       extraEnvs:
         - name: JAVA_TOOL_OPTIONS
-          value: "-Xms64m -Xmx256m -XX:+UseG1GC -XX:+HeapDumpOnOutOfMemoryError"
+          value: "-Xms64m -Xmx256m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:+HeapDumpOnOutOfMemoryError"
     ingress:
       enabled: true
       className: nginx
@@ -378,6 +378,10 @@ ph-ee-engine:
           value: |
             -Xms128m
             -Xmx256m
+            -XX:+UseSerialGC 
+            -XX:ReservedCodeCacheSize=64m 
+            -XX:MaxMetaspaceSize=128m 
+            -XX:+HeapDumpOnOutOfMemoryError
             -Djavax.net.ssl.trustStore=/shared/cacerts
             -Djavax.net.ssl.trustStorePassword=changeit
         - name: BULK_PROCESSOR_CALLBACK_URL
@@ -463,6 +467,8 @@ ph-ee-engine:
       value: /channel/transfer
     - name: BULK-PROCESSOR_ENDPOINTS_BATCH-EXECUTION
       value: /batchtransactions/execution
+    - name: JAVA_TOOL_OPTIONS
+      value: "-Xms64m -Xmx128m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:+HeapDumpOnOutOfMemoryError"
 
   channel:
     enabled: true
@@ -476,18 +482,51 @@ ph-ee-engine:
       tenant: "bluebank"
     DESTINATION_DFSPID: "bluebank"
 
-    # deployment: 
-    #   extraEnvs:
-    #     - name: "SPRING_CONFIG_ADDITIONAL_LOCATION"
-    #       value: "/config/"
+    deployment:
+      extraEnvs:
+        - name: "SERVER_SSL_KEY-STORE"
+          value: "/tls/keystore.p12"
+        - name: "SERVER_SSL_KEY-STORE-TYPE"
+          value: "PKCS12"
+        - name: "SERVER_SSL_KEY-STORE-PASSWORD"
+          value: "changeit"
+        - name: "SERVER_SSL_KEY-PASSWORD"
+          value: "changeit"
 
-    # LOGGING_LEVEL_ROOT: "DEBUG"
-    # deployment:
-    #   extraEnvs:
-    #     - name: "SERVER_SSL_ENABLED"
-    #       value: "false"
-    #     - name: "SERVER_PORT"
-    #       value: 8080
+      initContainers:
+        - name: create-keystore
+          image: eclipse-temurin:17-jre
+          command:
+            - sh
+            - -c
+            - |
+              echo "Creating PKCS12 keystore from TLS certificate..."
+              openssl pkcs12 -export \
+                -in /certs/tls.crt \
+                -inkey /certs/tls.key \
+                -out /tls/keystore.p12 \
+                -name sandbox-cert \
+                -passout pass:changeit
+              echo "Keystore created successfully"
+              ls -la /tls/
+          volumeMounts:
+            - name: sandbox-cert
+              mountPath: /certs
+              readOnly: true
+            - name: tls-keystore
+              mountPath: /tls
+
+      extraVolumeMounts:
+        - name: tls-keystore
+          mountPath: /tls
+          readOnly: true
+
+      extraVolumes:
+        - name: sandbox-cert
+          secret:
+            secretName: sandbox-secret
+        - name: tls-keystore
+          emptyDir: {}
 
     ingress:
       enabled: true
@@ -553,6 +592,8 @@ ph-ee-engine:
         value: "/channel/transfer"
       - name: BULK-PROCESSOR_ENDPOINTS_BATCH-EXECUTION
         value: "/batchtransactions/execution"
+      - name: JAVA_TOOL_OPTIONS
+        value: "-Xms64m -Xmx128m -XX:+ExitOnOutOfMemoryError -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:+HeapDumpOnOutOfMemoryError"
 
   zeebe_ops:
     enabled: true
@@ -564,7 +605,7 @@ ph-ee-engine:
     deployment:
       extraEnvs:
         - name: JAVA_TOOL_OPTIONS
-          value: "-Xms256m -Xmx512m -XX:+UseG1GC -XX:+HeapDumpOnOutOfMemoryError"
+          value: "-Xms128m -Xmx256m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:+HeapDumpOnOutOfMemoryError"
 
     limits:
       memory: "768M"
