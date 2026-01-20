@@ -116,9 +116,9 @@ def get_clients_from_mifos(config=None):
     payer_mojaloop = greenbank_clients[0]['msisdn'] if greenbank_clients else None
 
     # Get bluebank payees (multiple clients)
-    bluebank_clients = query_mifos_clients('bluebank', limit=10, mifos_host=mifos_host)
+    bluebank_clients = query_mifos_clients('bluebank', limit=20, mifos_host=mifos_host)
     payees = []
-    for client in bluebank_clients[:5]:  # Use first 5 payees
+    for client in bluebank_clients:
         payees.append({
             'msisdn': client['msisdn'],
             'name': client['name'],
@@ -131,7 +131,7 @@ def get_clients_from_mifos(config=None):
 # ----------------------------------------------------------------------
 # CSV Generation
 # ----------------------------------------------------------------------
-def generate_csv_data(mode='CLOSEDLOOP', payer_msisdn=None, payees=None):
+def generate_csv_data(mode='CLOSEDLOOP', payer_msisdn=None, payees=None, num_rows=None):
     """
     Generate CSV test data for bulk transactions.
 
@@ -139,6 +139,7 @@ def generate_csv_data(mode='CLOSEDLOOP', payer_msisdn=None, payees=None):
         mode: 'CLOSEDLOOP' or 'MOJALOOP'
         payer_msisdn: Payer phone number (defaults to DEFAULT_PAYER_MSISDN)
         payees: List of payee dictionaries (defaults to DEFAULT_PAYEES)
+        num_rows: Number of rows to generate (defaults to all payees * all amounts)
 
     Returns:
         List of transaction dictionaries
@@ -150,9 +151,13 @@ def generate_csv_data(mode='CLOSEDLOOP', payer_msisdn=None, payees=None):
 
     transactions = []
     txn_id = 0
+    row_count = 0
 
     for payee in payees:
         for amount in payee['amounts']:
+            if num_rows is not None and row_count >= num_rows:
+                break
+
             transaction = {
                 'id': txn_id,
                 'request_id': str(uuid.uuid4()),
@@ -168,15 +173,20 @@ def generate_csv_data(mode='CLOSEDLOOP', payer_msisdn=None, payees=None):
 
             transactions.append(transaction)
             txn_id += 1
+            row_count += 1
+
+        if num_rows is not None and row_count >= num_rows:
+            break
 
     return transactions
 
-def generate_govstack_csv_data(payees=None):
+def generate_govstack_csv_data(payees=None, num_rows=None):
     """
     Generate CSV test data for GovStack mode (no payer columns).
 
     Args:
         payees: List of payee dictionaries (defaults to DEFAULT_PAYEES)
+        num_rows: Number of rows to generate (defaults to all payees * all amounts)
 
     Returns:
         List of transaction dictionaries
@@ -186,9 +196,13 @@ def generate_govstack_csv_data(payees=None):
 
     transactions = []
     txn_id = 0
+    row_count = 0
 
     for payee in payees:
         for amount in payee['amounts']:
+            if num_rows is not None and row_count >= num_rows:
+                break
+
             transaction = {
                 'id': txn_id,
                 'request_id': str(uuid.uuid4()),
@@ -203,6 +217,10 @@ def generate_govstack_csv_data(payees=None):
 
             transactions.append(transaction)
             txn_id += 1
+            row_count += 1
+
+        if num_rows is not None and row_count >= num_rows:
+            break
 
     return transactions
 
@@ -231,7 +249,7 @@ def write_csv_file(csv_path, transactions, govstack_mode=False):
 
     return csv_path
 
-def generate_csv_files(output_dir=None, payer_msisdn_closedloop=None, payer_msisdn_mojaloop=None, payees=None):
+def generate_csv_files(output_dir=None, payer_msisdn_closedloop=None, payer_msisdn_mojaloop=None, payees=None, num_rows=None):
     """
     Generate all example CSV files.
 
@@ -240,6 +258,7 @@ def generate_csv_files(output_dir=None, payer_msisdn_closedloop=None, payer_msis
         payer_msisdn_closedloop: Payer phone number for CLOSEDLOOP (redbank)
         payer_msisdn_mojaloop: Payer phone number for MOJALOOP (greenbank)
         payees: List of payee dictionaries
+        num_rows: Number of rows to generate per file
 
     Returns:
         Dictionary of generated file paths with payer info
@@ -259,26 +278,29 @@ def generate_csv_files(output_dir=None, payer_msisdn_closedloop=None, payer_msis
 
     files = {}
 
+    # Determine filename suffix based on num_rows
+    suffix = f"-{num_rows}" if num_rows else "-4"
+
     # Generate closedloop CSV with redbank payer
-    closedloop_data = generate_csv_data('CLOSEDLOOP', payer_msisdn_closedloop, payees)
-    closedloop_path = output_dir / 'bulk-gazelle-closedloop-4.csv'
+    closedloop_data = generate_csv_data('CLOSEDLOOP', payer_msisdn_closedloop, payees, num_rows)
+    closedloop_path = output_dir / f'bulk-gazelle-closedloop{suffix}.csv'
     write_csv_file(closedloop_path, closedloop_data, govstack_mode=False)
-    files['closedloop'] = {'path': closedloop_path, 'payer': payer_msisdn_closedloop, 'tenant': 'redbank'}
-    print(f"✓ Generated {closedloop_path} (payer: {payer_msisdn_closedloop}, tenant: redbank)", file=sys.stderr)
+    files['closedloop'] = {'path': closedloop_path, 'payer': payer_msisdn_closedloop, 'tenant': 'redbank', 'rows': len(closedloop_data)}
+    print(f"✓ Generated {closedloop_path} ({len(closedloop_data)} rows, payer: {payer_msisdn_closedloop}, tenant: redbank)", file=sys.stderr)
 
     # Generate mojaloop CSV with greenbank payer
-    mojaloop_data = generate_csv_data('MOJALOOP', payer_msisdn_mojaloop, payees)
-    mojaloop_path = output_dir / 'bulk-gazelle-mojaloop-4.csv'
+    mojaloop_data = generate_csv_data('MOJALOOP', payer_msisdn_mojaloop, payees, num_rows)
+    mojaloop_path = output_dir / f'bulk-gazelle-mojaloop{suffix}.csv'
     write_csv_file(mojaloop_path, mojaloop_data, govstack_mode=False)
-    files['mojaloop'] = {'path': mojaloop_path, 'payer': payer_msisdn_mojaloop, 'tenant': 'greenbank'}
-    print(f"✓ Generated {mojaloop_path} (payer: {payer_msisdn_mojaloop}, tenant: greenbank)", file=sys.stderr)
+    files['mojaloop'] = {'path': mojaloop_path, 'payer': payer_msisdn_mojaloop, 'tenant': 'greenbank', 'rows': len(mojaloop_data)}
+    print(f"✓ Generated {mojaloop_path} ({len(mojaloop_data)} rows, payer: {payer_msisdn_mojaloop}, tenant: greenbank)", file=sys.stderr)
 
     # Generate GovStack CSV (no payer columns)
-    govstack_data = generate_govstack_csv_data(payees)
-    govstack_path = output_dir / 'bulk-gazelle-govstack-4.csv'
+    govstack_data = generate_govstack_csv_data(payees, num_rows)
+    govstack_path = output_dir / f'bulk-gazelle-govstack{suffix}.csv'
     write_csv_file(govstack_path, govstack_data, govstack_mode=True)
-    files['govstack'] = {'path': govstack_path, 'payer': 'N/A (uses registeringInstitutionId)', 'tenant': 'greenbank'}
-    print(f"✓ Generated {govstack_path} (GovStack mode)", file=sys.stderr)
+    files['govstack'] = {'path': govstack_path, 'payer': 'N/A (uses registeringInstitutionId)', 'tenant': 'greenbank/redbank', 'rows': len(govstack_data)}
+    print(f"✓ Generated {govstack_path} ({len(govstack_data)} rows, GovStack mode)", file=sys.stderr)
 
     return files
 
@@ -297,8 +319,14 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Generate all CSV files with defaults
+  # Generate all CSV files with defaults (queries Mifos for payers/payees)
   ./generate-example-csv-files.py
+
+  # Generate with 10 rows per file
+  ./generate-example-csv-files.py --num-rows 10
+
+  # Generate 100 rows for mojaloop mode only
+  ./generate-example-csv-files.py --mode mojaloop --num-rows 100
 
   # Generate with custom config
   ./generate-example-csv-files.py --config ~/myconfig.ini
@@ -306,21 +334,37 @@ Examples:
   # Generate to specific directory
   ./generate-example-csv-files.py --output-dir /tmp/csv-files
 
-  # Generate specific mode only
-  ./generate-example-csv-files.py --mode closedloop
-
   # Generate with custom payer MSISDNs for each tenant
   ./generate-example-csv-files.py --payer-msisdn-closedloop 0987654321 --payer-msisdn-mojaloop 0413356886
 
-Generated files:
-  - bulk-gazelle-closedloop-4.csv (CLOSEDLOOP mode, redbank payer)
-  - bulk-gazelle-mojaloop-4.csv (MOJALOOP mode, greenbank payer)
-  - bulk-gazelle-govstack-4.csv (GovStack mode, no payer columns)
+Generated files (suffix indicates row count):
+  - bulk-gazelle-closedloop-N.csv (CLOSEDLOOP mode, redbank payer)
+  - bulk-gazelle-mojaloop-N.csv (MOJALOOP mode, greenbank payer)
+  - bulk-gazelle-govstack-N.csv (GovStack mode, no payer columns)
 
-Tenant mapping:
-  - CLOSEDLOOP → redbank tenant (closedloop payer, direct Fineract)
-  - MOJALOOP → greenbank tenant (Mojaloop payer, via switch)
-  - Payees → bluebank tenant (payee FSP)
+Tenant/Mode mapping:
+  - CLOSEDLOOP → redbank tenant (payer), bluebank tenant (payees)
+    * Uses minimal_mock_fund_transfer workflow
+    * Direct transfers within same Payment Hub instance
+    * For testing: ./submit-batch.py --csv-file bulk-gazelle-closedloop-N.csv --tenant redbank
+
+  - MOJALOOP → greenbank tenant (payer), bluebank tenant (payees via switch)
+    * Uses PayerFundTransfer workflow with Mojaloop vNext switch
+    * Cross-FSP transfers with party lookup, quotes, and switch routing
+    * For testing: ./submit-batch.py --csv-file bulk-gazelle-mojaloop-N.csv --tenant greenbank
+
+  - GOVSTACK → Can use either redbank or greenbank as payer (specify with --registering-institution)
+    * Enables identity validation via identity-account-mapper
+    * Batch de-bulking by payee FSP (bankingInstitutionCode)
+    * For testing with redbank: ./submit-batch.py --csv-file bulk-gazelle-govstack-N.csv --tenant redbank --govstack --registering-institution redbank
+    * For testing with greenbank: ./submit-batch.py --csv-file bulk-gazelle-govstack-N.csv --tenant greenbank --govstack --registering-institution greenbank
+
+Notes:
+  - Payees are always from bluebank tenant (beneficiary FSP)
+  - Redbank is default payer for CLOSEDLOOP mode (direct transfers)
+  - Greenbank is default payer for MOJALOOP mode (via switch)
+  - GovStack mode requires beneficiaries registered with matching registeringInstitutionId
+    (use ./register-beneficiaries.py --payer-tenant <redbank|greenbank> first)
         """
     )
 
@@ -331,6 +375,8 @@ Tenant mapping:
     parser.add_argument('--mode', '-m', choices=['closedloop', 'mojaloop', 'govstack', 'all'],
                        default='all',
                        help='Generate specific mode only, or all (default: all)')
+    parser.add_argument('--num-rows', '-n', type=int, default=None,
+                       help='Number of transaction rows to generate per file (default: all available payees)')
     parser.add_argument('--payer-msisdn-closedloop', type=str, default=None,
                        help='Payer MSISDN for CLOSEDLOOP/redbank (default: query from Mifos redbank)')
     parser.add_argument('--payer-msisdn-mojaloop', type=str, default=None,
@@ -391,25 +437,26 @@ Tenant mapping:
 
     # Generate requested CSV files
     if args.mode == 'all':
-        files = generate_csv_files(args.output_dir, args.payer_msisdn_closedloop, args.payer_msisdn_mojaloop, payees)
+        files = generate_csv_files(args.output_dir, args.payer_msisdn_closedloop, args.payer_msisdn_mojaloop, payees, args.num_rows)
         print(f"\n✓ Generated {len(files)} CSV files", file=sys.stderr)
     else:
         # Generate single mode
+        suffix = f"-{args.num_rows}" if args.num_rows else "-4"
         if args.mode == 'govstack':
-            data = generate_govstack_csv_data(payees)
-            csv_path = args.output_dir / f'bulk-gazelle-{args.mode}-4.csv'
+            data = generate_govstack_csv_data(payees, args.num_rows)
+            csv_path = args.output_dir / f'bulk-gazelle-{args.mode}{suffix}.csv'
             write_csv_file(csv_path, data, govstack_mode=True)
-            print(f"✓ Generated {csv_path} (GovStack mode)", file=sys.stderr)
+            print(f"✓ Generated {csv_path} ({len(data)} rows, GovStack mode)", file=sys.stderr)
         elif args.mode == 'closedloop':
-            data = generate_csv_data('CLOSEDLOOP', args.payer_msisdn_closedloop, payees)
-            csv_path = args.output_dir / f'bulk-gazelle-{args.mode}-4.csv'
+            data = generate_csv_data('CLOSEDLOOP', args.payer_msisdn_closedloop, payees, args.num_rows)
+            csv_path = args.output_dir / f'bulk-gazelle-{args.mode}{suffix}.csv'
             write_csv_file(csv_path, data, govstack_mode=False)
-            print(f"✓ Generated {csv_path} (payer: {args.payer_msisdn_closedloop}, tenant: redbank)", file=sys.stderr)
+            print(f"✓ Generated {csv_path} ({len(data)} rows, payer: {args.payer_msisdn_closedloop}, tenant: redbank)", file=sys.stderr)
         elif args.mode == 'mojaloop':
-            data = generate_csv_data('MOJALOOP', args.payer_msisdn_mojaloop, payees)
-            csv_path = args.output_dir / f'bulk-gazelle-{args.mode}-4.csv'
+            data = generate_csv_data('MOJALOOP', args.payer_msisdn_mojaloop, payees, args.num_rows)
+            csv_path = args.output_dir / f'bulk-gazelle-{args.mode}{suffix}.csv'
             write_csv_file(csv_path, data, govstack_mode=False)
-            print(f"✓ Generated {csv_path} (payer: {args.payer_msisdn_mojaloop}, tenant: greenbank)", file=sys.stderr)
+            print(f"✓ Generated {csv_path} ({len(data)} rows, payer: {args.payer_msisdn_mojaloop}, tenant: greenbank)", file=sys.stderr)
 
     print("\n============================================================", file=sys.stderr)
     total_txns = len(payees) * len(payees[0]['amounts']) if payees else 0

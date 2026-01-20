@@ -621,13 +621,73 @@ ph-ee-engine:
 
   ph_ee_connector_ams_mifos:
     enabled: true
-    # deployment:
-    #   extraEnvs:
-    #     - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_BOOT_CONTEXT_CONFIG
-    #       value: "DEBUG"
-    #     - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CORE_ENV
-    #       value: "DEBUG"
-    #     - name: LOGGING_LEVEL_ROOT
-    #       value: "DEBUG"
-        # For debugging keystore loading issues when running from hostpath mounted code
-        # - name: AMS_LOCAL_KEYSTORE_PATH
+    deployment:
+      extraEnvs:
+        - name: JAVA_TOOL_OPTIONS
+          value: -Xms128m -Xmx256m
+        # Override keystore path to use the shared keystore location
+        # Spring Boot converts AMS_LOCAL_KEYSTOREPATH to ams.local.keystore-path
+        - name: AMS_LOCAL_KEYSTOREPATH
+          value: /keystores/keystore.jks
+
+      initContainers:
+        - name: wait-for-gateway
+          image: curlimages/curl:latest
+          command: ['sh', '-c']
+          args:
+            - |
+              GATEWAY_HEALTH_URL="http://phee-zeebe-gateway:9600/actuator/health/liveness"
+              echo "Waiting for Zeebe Gateway liveness check on $GATEWAY_HEALTH_URL..."
+              until curl -s $GATEWAY_HEALTH_URL | grep -q '"status":"UP"'; do
+                echo "Gateway not yet fully ready..."
+                sleep 2
+              done
+              echo "Gateway is fully up! Proceeding to main container..."
+        - name: wait-db
+          image: busybox:1.35
+          imagePullPolicy: IfNotPresent
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "Waiting for database connection..."
+              until nc -z operationsmysql 3306; do
+                echo "Database not ready, waiting..."
+                sleep 2
+              done
+              echo "Database is ready!"
+        - name: copy-keystore
+          image: eclipse-temurin:17-jre
+          command:
+            - sh
+            - -c
+            - |
+              echo "Copying keystore.jks from build directory..."
+              if [ -f /app/build/resources/main/keystore.jks ]; then
+                cp /app/build/resources/main/keystore.jks /keystores/keystore.jks
+                echo "Keystore copied successfully from hostpath"
+                ls -lh /keystores/keystore.jks
+              else
+                echo "Warning: keystore.jks not found in /app/build/resources/main/"
+                echo "This is expected for docker image mode where keystore.jks is bundled in the JAR"
+                echo "Creating placeholder - the actual keystore will be loaded from the JAR resources"
+                # Create a dummy keystore so the file exists, but the app will use its bundled version
+                keytool -genkeypair -alias dummy -keyalg RSA -keysize 2048 \
+                  -keystore /keystores/keystore.jks \
+                  -storepass openmf \
+                  -dname "CN=localhost" \
+                  -validity 365 \
+                  -noprompt
+              fi
+          volumeMounts:
+            - name: local-code
+              mountPath: /app
+            - name: ams-keystore
+              mountPath: /keystores
+
+      extraVolumeMounts:
+        - name: ams-keystore
+          mountPath: /keystores
+
+      extraVolumes:
+        - name: ams-keystore
+          emptyDir: {}

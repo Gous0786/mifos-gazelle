@@ -395,26 +395,36 @@ class LocalDevPatcher:
     def patch_deployment(self, component: str, dry_run: bool = False) -> bool:
         """
         Patch the Deployment.yaml for a given component
-        
+
         Args:
             component: Name of the component section in config
             dry_run: If True, only show what would be changed without modifying files
-        
+
         Returns:
             True if successful, False otherwise
         """
         if component not in self.config:
             print(f"❌ Component '{component}' not found in config")
             return False
-        
+
         comp_config = self.config[component]
-        
+
         # Get component configuration
         directory = Path(self._expand_vars(comp_config['directory']))
-        image = comp_config['image']
-        jarpath = comp_config['jarpath']
+        app_type = comp_config.get('app_type', 'springboot')  # Default to springboot for backward compatibility
+
+        # For webapp type, skip patching - configure via values.yaml instead
+        if app_type == 'webapp':
+            print(f"\n⏭️  Skipping deployment patch for {component}")
+            print(f"  ℹ️  Webapp components should be configured via values.yaml")
+            print(f"  💡 See config/ph_values.yaml deployment.extraVolumeMounts and deployment.extraVolumes")
+            print(f"  ✅ Use --checkout to clone the repository")
+            return True
+
+        image = comp_config.get('image', '')  # Optional for webapp type
+        jarpath = comp_config.get('jarpath', '')  # Optional for webapp type
         hostpath = self._expand_vars(comp_config['hostpath'])
-        
+
         deployment_file = directory / "templates" / "deployment.yaml"
         backup_file = deployment_file.parent / f"_deployment.yaml.backup"
         
@@ -432,8 +442,10 @@ class LocalDevPatcher:
         
         print(f"\n{'[DRY RUN] ' if dry_run else ''}Processing {component}...")
         print(f"  📁 File: {deployment_file}")
-        print(f"  🖼️  Image: {image}")
-        print(f"  📦 JAR: {jarpath}")
+        print(f"  📦 App Type: {app_type}")
+        if app_type == 'springboot':
+            print(f"  🖼️  Image: {image}")
+            print(f"  📦 JAR: {jarpath}")
         print(f"  🔗 Host Path: {hostpath}")
         
         # Read the deployment file
@@ -451,7 +463,7 @@ class LocalDevPatcher:
                 print(f"  ℹ️  Using existing backup: {backup_file.name}")
         
         # Apply patches
-        modified_content = self._apply_patches(content, image, jarpath, hostpath, component)
+        modified_content = self._apply_patches(content, image, jarpath, hostpath, component, app_type)
         
         if dry_run:
             print(f"  ℹ️  Would modify deployment (dry run)")
@@ -465,7 +477,7 @@ class LocalDevPatcher:
         
         return True
     
-    def _apply_patches(self, content: str, image: str, jarpath: str, hostpath: str, component: str) -> str:
+    def _apply_patches(self, content: str, image: str, jarpath: str, hostpath: str, component: str, app_type: str = 'springboot') -> str:
         """Apply the necessary patches to the deployment YAML content"""
         
         lines = content.split('\n')
@@ -601,35 +613,58 @@ class LocalDevPatcher:
             # Process main container image line
             if in_main_container_def and not image_patched and 'image:' in line and '{{' in line and 'Values.image' in line:
                 indent = len(line) - len(line.lstrip())
-                result_lines.append(' ' * indent + f'image: "{image}"  # this is the JDK to use')
-                result_lines.append(' ' * indent + f'#{line.strip()}  # commented out to allow hostpath local dev/test')
+                if app_type == 'springboot' and image:
+                    result_lines.append(' ' * indent + f'image: "{image}"  # this is the JDK to use')
+                    result_lines.append(' ' * indent + f'#{line.strip()}  # commented out to allow hostpath local dev/test')
+                    if debug:
+                        print(f"    -> Patched image to {image}")
+                elif app_type == 'webapp':
+                    # For webapp, keep original image (nginx) - no need to override
+                    result_lines.append(line)
+                    if debug:
+                        print(f"    -> Keeping original image for webapp")
+                else:
+                    result_lines.append(line)
                 image_patched = True
-                if debug:
-                    print(f"    -> Patched image")
                 i += 1
                 continue
             
-            # Process volumeMounts
+            # Process volumeMounts - add command BEFORE volumeMounts
             if in_main_container_def and 'volumeMounts:' in line and not volumemounts_patched:
+                indent = len(line) - len(line.lstrip())
+
+                # Add command BEFORE volumeMounts to maintain valid YAML structure
+                # Only add command for springboot apps
+                if app_type == 'springboot' and jarpath:
+                    result_lines.append(' ' * indent + f'command: ["java", "-jar", "{jarpath}"] # replace with your jar file name')
+                    command_patched = True
+                    if debug:
+                        print(f"    -> Added command for springboot app")
+                elif app_type == 'webapp':
+                    # For webapp, skip command - nginx will serve static files
+                    if debug:
+                        print(f"    -> Skipping command for webapp (nginx will serve static files)")
+
                 result_lines.append(line)
                 i += 1
-                indent = len(line) - len(line.lstrip())
-                
+
                 # Copy existing volumeMounts
-                while i < len(lines) and (lines[i].strip().startswith('- name:') or lines[i].strip().startswith('mountPath:')):
+                while i < len(lines) and (lines[i].strip().startswith('- name:') or lines[i].strip().startswith('mountPath:') or lines[i].strip().startswith('readOnly:') or lines[i].strip().startswith('subPath:')):
                     result_lines.append(lines[i])
                     i += 1
-                
-                # Add our volumeMount
-                result_lines.append(' ' * (indent + 2) + '- name: local-code')
-                result_lines.append(' ' * (indent + 4) + 'mountPath: /app # Mount your local code into /app in the container')
-                
-                # Add command right after volumeMounts
-                result_lines.append(' ' * indent + f'command: ["java", "-jar", "{jarpath}"] # replace with your jar file name')
-                command_patched = True
+
+                # Add our volumeMount - only for springboot type
+                # For webapp type, volumeMounts should be managed via values.yaml to avoid conflicts
+                if app_type == 'springboot':
+                    result_lines.append(' ' * (indent + 2) + '- name: local-code')
+                    result_lines.append(' ' * (indent + 4) + 'mountPath: /app # Mount your local code into /app in the container')
+                    if debug:
+                        print(f"    -> Added volumeMount for springboot")
+                elif app_type == 'webapp':
+                    if debug:
+                        print(f"    -> Skipping volumeMount for webapp (configure via values.yaml extraVolumeMounts)")
+
                 volumemounts_patched = True
-                if debug:
-                    print(f"    -> Added volumeMount and command")
                 continue
             
             # Default: just add the line
