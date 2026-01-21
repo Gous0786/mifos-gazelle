@@ -429,9 +429,23 @@ CONFIG_FILE_PATH="$DEFAULT_CONFIG_FILE"
 function main {
     welcome
     install_crudini
+    if [[ $# -gt 0 && ! "$1" =~ ^- ]]; then
+        echo "ERROR: Invalid command syntax. All options must start with a hyphen (e.g., -m)."
+        showUsage
+        exit 1
+    fi
 
     declare -A cmd_args_map
     getOptions cmd_args_map "$@"
+
+    for key in "${!cmd_args_map[@]}"; do
+        if [[ "${cmd_args_map[$key]}" =~ ^- ]]; then
+            echo "ERROR: Argument for flag '-${key:0:1}' cannot start with a hyphen (found '${cmd_args_map[$key]}')."
+            echo "It looks like you missed a value or provided flags out of order."
+            showUsage
+            exit 1
+        fi
+    done
 
     if [[ -n "${cmd_args_map["config_file_path"]}" ]]; then
         CONFIG_FILE_PATH="${cmd_args_map["config_file_path"]}"
