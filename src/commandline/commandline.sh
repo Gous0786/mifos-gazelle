@@ -446,6 +446,13 @@ function main {
             exit 1
         fi
     done
+    shift $((OPTIND - 1))
+    if [[ $# -gt 0 ]]; then
+        echo "ERROR: Unexpected or malformed argument(s) detected: $@"
+        echo "Every option must have a flag (e.g., use -m instead of just m)."
+        showUsage
+        exit 1
+    fi
 
     if [[ -n "${cmd_args_map["config_file_path"]}" ]]; then
         CONFIG_FILE_PATH="${cmd_args_map["config_file_path"]}"
