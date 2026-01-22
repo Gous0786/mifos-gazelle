@@ -430,7 +430,7 @@ ph-ee-engine:
 
   channel:
     enabled: true
-    image: openmf/ph-ee-connector-channel:mifos-v2.0.0-fixed
+    image: openmf/ph-ee-connector-channel:mifos-v2.0.0
     tenantPrimary:
       clientId: "mifos"
       clientSecret: "password"
