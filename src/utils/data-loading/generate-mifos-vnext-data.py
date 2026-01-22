@@ -27,6 +27,9 @@ TENANTS = {
     "greenbank": 1,
     "redbank": 1
 }
+# Only register payee tenants with identity-account-mapper (beneficiaries)
+# Payer tenants (greenbank, redbank) don't need identity-account-mapper registration
+IDENTITY_MAPPER_TENANTS = {"bluebank"}
 FIRST_NAMES = [
     "Alice", "Bob", "Charlie", "Diana", "Ethan",
     "Fiona", "George", "Hannah", "Isaac", "Julia",
@@ -219,6 +222,22 @@ def get_clients_from_mifos(headers, tenant):
 
     return clients
 
+def check_client_exists_by_mobile(headers, mobile_number):
+    """Check if a client with this mobile number already exists."""
+    url = f"{CLIENTS_API_URL}"
+    params = {"mobileNo": mobile_number}
+
+    data = make_api_request("GET", url, headers, params=params)
+
+    if data and 'pageItems' in data and len(data['pageItems']) > 0:
+        client = data['pageItems'][0]
+        return {
+            'client_id': client.get('id'),
+            'name': client.get('displayName'),
+            'mobile': client.get('mobileNo')
+        }
+    return None
+
 def get_savings_accounts_for_client(headers, client_id):
     """Get savings accounts for a specific client."""
     url = f"{API_BASE_URL}/clients/{client_id}/accounts"
@@ -269,7 +288,7 @@ def fetch_all_clients_from_mifos(tenants):
 # ----------------------------------------------------------------------
 # Client creation
 # ----------------------------------------------------------------------
-def create_client(headers, locale, tenant_id):
+def create_client(headers, locale, tenant_id, mobile_number):
     count = tenant_client_counter.get(tenant_id, 0)
     tenant_client_counter[tenant_id] = count + 1
 
@@ -292,7 +311,6 @@ def create_client(headers, locale, tenant_id):
     full_name = f"{firstname} {lastname}"
 
     submitted_date = datetime.datetime.now().strftime(DATE_FORMAT)
-    mobile_number = unique_mobile_numbers.pop(0)
 
     print(f"Creating client {full_name} ({mobile_number}) for {tenant_id}", file=sys.stderr)
 
@@ -477,95 +495,6 @@ def set_global_urls(domain):
     VNEXT_BASE_URL = f"http://vnextadmin.{domain}/_interop/participants/MSISDN/"
     IDENTITY_MAPPER_URL = f"https://identity-mapper.{domain}"
 
-# # ----------------------------------------------------------------------
-# # CSV Generation
-# # ----------------------------------------------------------------------
-# def generate_bulk_csv_files():
-#     """Generate test CSV files for mojaloop and closedloop modes."""
-#     print("\n=== Generating bulk CSV files ===", file=sys.stderr)
-
-#     # Find payer (greenbank) and payees (bluebank)
-#     payer = None
-#     payees = []
-
-#     for client in created_clients:
-#         if client['tenant'] == 'greenbank':
-#             payer = client
-#         elif client['tenant'] == 'bluebank':
-#             payees.append(client)
-
-#     if not payer:
-#         print("ERROR: No greenbank payer found", file=sys.stderr)
-#         return
-
-#     if len(payees) < 2:
-#         print(f"ERROR: Need at least 2 bluebank payees, found {len(payees)}", file=sys.stderr)
-#         return
-
-#     # Generate 4 transactions: 2 to each of the first 2 payees
-#     transactions = []
-#     amounts = [10.00, 15.00]  # Different amounts for variety
-
-#     for idx, payee in enumerate(payees[:2]):
-#         for amount in amounts:
-#             txn_id = len(transactions)
-#             request_id = str(uuid.uuid4())
-#             transactions.append({
-#                 'id': txn_id,
-#                 'request_id': request_id,
-#                 'payer_mobile': payer['mobile'],
-#                 'payer_account': payer['account_id'],
-#                 'payee_mobile': payee['mobile'],
-#                 'payee_account': payee['account_id'],
-#                 'payee_name': payee['name'],
-#                 'amount': amount
-#             })
-
-#     # Generate MOJALOOP CSV
-#     mojaloop_file = Path(__file__).parent / "bulk-gazelle-mojaloop-4.csv"
-#     print(f"Generating {mojaloop_file}", file=sys.stderr)
-
-#     with open(mojaloop_file, 'w') as f:
-#         # Header
-#         f.write("id,request_id,payment_mode,payer_identifier_type,payer_identifier,payee_identifier_type,payee_identifier,amount,currency,note,account_number\n")
-
-#         # Transactions (NO trailing newline after last row)
-#         for i, txn in enumerate(transactions):
-#             line = f"{txn['id']},{txn['request_id']},mojaloop,MSISDN,{txn['payer_mobile']},MSISDN,{txn['payee_mobile']},{txn['amount']:.2f},USD,Payment to {txn['payee_name']},{txn['payee_account']}"
-#             if i < len(transactions) - 1:
-#                 f.write(line + "\n")
-#             else:
-#                 f.write(line)  # NO newline after last row
-
-#     print(f"✓ Generated {mojaloop_file}", file=sys.stderr)
-
-#     # Generate CLOSEDLOOP CSV
-#     closedloop_file = Path(__file__).parent / "bulk-gazelle-closedloop-4.csv"
-#     print(f"Generating {closedloop_file}", file=sys.stderr)
-
-#     with open(closedloop_file, 'w') as f:
-#         # Header
-#         f.write("id,request_id,payment_mode,payer_identifier_type,payer_identifier,payee_identifier_type,payee_identifier,amount,currency,note,account_number\n")
-
-#         # Transactions (NO trailing newline after last row)
-#         for i, txn in enumerate(transactions):
-#             line = f"{txn['id']},{txn['request_id']},closedloop,MSISDN,{txn['payer_mobile']},MSISDN,{txn['payee_mobile']},{txn['amount']:.2f},USD,Payment to {txn['payee_name']},{txn['payee_account']}"
-#             if i < len(transactions) - 1:
-#                 f.write(line + "\n")
-#             else:
-#                 f.write(line)  # NO newline after last row
-
-#     print(f"✓ Generated {closedloop_file}", file=sys.stderr)
-
-#     # Print summary
-#     print(f"\n{'='*60}", file=sys.stderr)
-#     print(f"CSV files created with {len(transactions)} transactions:", file=sys.stderr)
-#     print(f"  - {mojaloop_file.name}", file=sys.stderr)
-#     print(f"  - {closedloop_file.name}", file=sys.stderr)
-#     print(f"\nPayer: {payer['name']} ({payer['mobile']}) - greenbank account {payer['account_id']}", file=sys.stderr)
-#     for idx, payee in enumerate(payees[:2]):
-#         print(f"Payee {idx+1}: {payee['name']} ({payee['mobile']}) - bluebank account {payee['account_id']}", file=sys.stderr)
-#     print(f"{'='*60}", file=sys.stderr)
 
 # ----------------------------------------------------------------------
 # Main
@@ -604,16 +533,31 @@ if __name__ == "__main__":
 
         print(f"\nFound {len(all_clients)} clients total", file=sys.stderr)
 
-        # Register each client with identity-account-mapper
-        print("\nRegistering clients with identity-account-mapper...", file=sys.stderr)
-        success_count = 0
+        # Register clients with identity-account-mapper (payees only) and vNext (all)
+        print("\nRegistering clients with identity-account-mapper and vNext...", file=sys.stderr)
+        print(f"  Identity-mapper payee tenants: {', '.join(IDENTITY_MAPPER_TENANTS)}", file=sys.stderr)
+        mapper_success_count = 0
+        vnext_success_count = 0
         for client in all_clients:
-            if register_beneficiary_with_identity_mapper(client['tenant'], client['mobile'], client['account_id']):
-                success_count += 1
+            # Register with identity-account-mapper (only for payee tenants)
+            if client['tenant'] in IDENTITY_MAPPER_TENANTS:
+                if register_beneficiary_with_identity_mapper(client['tenant'], client['mobile'], client['account_id']):
+                    mapper_success_count += 1
+            else:
+                print(f"  Skipping identity-mapper for payer tenant: {client['tenant']} ({client['mobile']})", file=sys.stderr)
+
+            # Register with vNext oracle (all tenants need this for party lookup)
+            tenant_headers = HEADERS.copy()
+            tenant_headers["Fineract-Platform-TenantId"] = client['tenant']
+            if register_client_with_vnext(tenant_headers, client['tenant'], client['mobile']):
+                vnext_success_count += 1
+
             # Add to created_clients for CSV generation
             created_clients.append(client)
 
-        print(f"\nRegistered {success_count}/{len(all_clients)} clients", file=sys.stderr)
+        payee_count = sum(1 for c in all_clients if c['tenant'] in IDENTITY_MAPPER_TENANTS)
+        print(f"\nRegistered {mapper_success_count}/{payee_count} payee clients with identity-account-mapper", file=sys.stderr)
+        print(f"Registered {vnext_success_count}/{len(all_clients)} clients with vNext oracle", file=sys.stderr)
 
         print("\n✓ Regeneration complete!", file=sys.stderr)
         sys.exit(0)
@@ -671,8 +615,48 @@ if __name__ == "__main__":
         for i in range(1, num_clients + 1):
             print(f"\n--- Client {i}/{num_clients} for {tenant_id} ---", file=sys.stderr)
 
-            # client
-            client_id, mobile, name = create_client(HEADERS, LOCALE, tenant_id)
+            # Pre-generate the mobile number for this client
+            mobile = unique_mobile_numbers.pop(0)
+
+            # Check if client already exists with this mobile number
+            existing_client = check_client_exists_by_mobile(HEADERS, mobile)
+            if existing_client:
+                print(f"Client with mobile {mobile} already exists (ID: {existing_client['client_id']})", file=sys.stderr)
+                client_id = existing_client['client_id']
+                name = existing_client['name']
+
+                # Get existing savings account
+                acct_id = get_savings_accounts_for_client(HEADERS, client_id)
+                if not acct_id:
+                    print(f"No savings account found for existing client {mobile}, skipping", file=sys.stderr)
+                    continue
+
+                print(f"Using existing account {acct_id}", file=sys.stderr)
+
+                # Re-register with vNext and identity-account-mapper (idempotent)
+                # Note: We don't have ext_id for existing accounts, but it's only used for interop registration
+                register_client_with_vnext(HEADERS, tenant_id, mobile)
+
+                # Only register payee tenants with identity-account-mapper
+                if tenant_id in IDENTITY_MAPPER_TENANTS:
+                    register_beneficiary_with_identity_mapper(tenant_id, mobile, acct_id)
+                else:
+                    print(f"Skipping identity-mapper for payer tenant {tenant_id}", file=sys.stderr)
+
+                # track client
+                created_clients.append({
+                    'tenant': tenant_id,
+                    'mobile': mobile,
+                    'account_id': acct_id,
+                    'client_id': client_id,
+                    'name': name
+                })
+
+                print(f"--- Re-registered existing client {i} ---", file=sys.stderr)
+                continue
+
+            # Create new client
+            client_id, mobile, name = create_client(HEADERS, LOCALE, tenant_id, mobile)
             if not client_id:
                 continue
 
@@ -698,8 +682,11 @@ if __name__ == "__main__":
             register_interop_party(HEADERS, client_id, ext_id, mobile)
             register_client_with_vnext(HEADERS, tenant_id, mobile)
 
-            # identity-account-mapper
-            register_beneficiary_with_identity_mapper(tenant_id, mobile, acct_id)
+            # identity-account-mapper (only for payee tenants)
+            if tenant_id in IDENTITY_MAPPER_TENANTS:
+                register_beneficiary_with_identity_mapper(tenant_id, mobile, acct_id)
+            else:
+                print(f"Skipping identity-mapper for payer tenant {tenant_id}", file=sys.stderr)
 
             # track client for CSV generation
             created_clients.append({
