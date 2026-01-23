@@ -17,12 +17,15 @@ function usage() {
 cat <<EOF
 Usage: $0 [-f <config_file>] [-p <payer_msisdn>] [-r <payee_msisdn>] [-t <tenant_id>] [-d <payee_dfsp_id>] [-v]
  -c Path to config.ini file (default: ../config/config.ini) [optional]
- -p Payer MSISDN (default: 0413509790 - greenbank client 1) [optional]
- -r Payee MSISDN (default: 0495492927 - bluebank client 1) [optional]
+ -p Payer MSISDN (default: auto-detect first client from payer tenant) [optional]
+ -r Payee MSISDN (default: auto-detect first client from payee tenant) [optional]
  -t Platform-TenantId (default: greenbank) [optional]
  -d X-PayeeDFSP-ID (default: bluebank) [optional]
  -v Enable debug/verbose mode [optional]
  -h Show this help message
+
+Note: If -p or -r are not provided, the script will automatically query for the
+      first available client in the respective tenant.
 EOF
 }
 
@@ -99,14 +102,49 @@ function lookup_client_name() {
     fi
 }
 
+# Function to get first client MSISDN from tenant
+function get_first_client_msisdn() {
+    local tenant="$1"
+    local client_type="$2"  # "payer" or "payee" for logging
+
+    echo "🔍 Querying first $client_type client in tenant: $tenant..." >&2
+
+    local response
+    response=$(curl -sk -u "$MIFOS_AUTH" -H "Fineract-Platform-TenantId: $tenant" \
+        "$MIFOS_CORE_API/clients?limit=1&orderBy=id&sortOrder=ASC" 2>/dev/null || echo "")
+
+    if [[ "$debug" == true ]]; then
+        echo -e "${BLUE}DEBUG - First client API response:${RESET}" >&2
+        echo "$response" >&2
+        echo "" >&2
+    fi
+
+    if [[ -z "$response" ]] || [[ "$response" == *"error"* ]]; then
+        echo "" >&2
+        return 1
+    fi
+
+    # Extract mobile number from first client in pageItems
+    local msisdn
+    msisdn=$(echo "$response" | grep -o '"mobileNo":"[^"]*"' | head -n1 | sed 's/"mobileNo":"\([^"]*\)"/\1/')
+
+    if [[ -n "$msisdn" ]] && [[ "$msisdn" != "null" ]]; then
+        echo "$msisdn"
+        return 0
+    else
+        echo "" >&2
+        return 1
+    fi
+}
+
 # Defaults
 SCRIPT_DIR=$( cd $(dirname "$0") ; pwd )
 default_config_dir="$( cd $(dirname "$SCRIPT_DIR")/../config ; pwd )"
 default_config_ini="$default_config_dir/config.ini"
 config_ini=""  # Will be set after parsing options
 
-payer_msisdn="0413509790"  # Deterministic greenbank client 1 (matches generate-mifos-vnext-data.py)
-payee_msisdn="0495492927"  # Deterministic bluebank client 1 (matches generate-mifos-vnext-data.py)
+payer_msisdn=""  # Will be auto-detected from greenbank tenant if not provided
+payee_msisdn=""  # Will be auto-detected from bluebank tenant if not provided
 tenant_id="greenbank"
 payee_dfsp_id="bluebank"
 debug=false
@@ -160,6 +198,38 @@ if [[ "$debug" == true ]]; then
     echo -e "${BLUE}DEBUG - GAZELLE_DOMAIN: $GAZELLE_DOMAIN${RESET}"
     echo -e "${BLUE}DEBUG - TRANSFER_URL: $TRANSFER_URL${RESET}"
     echo -e "${BLUE}DEBUG - MIFOS_CORE_API: $MIFOS_CORE_API${RESET}"
+    echo ""
+fi
+
+# Auto-detect payer MSISDN if not provided
+if [[ -z "$payer_msisdn" ]]; then
+    echo "🔍 Auto-detecting payer MSISDN from tenant: $tenant_id..."
+    set +e
+    payer_msisdn=$(get_first_client_msisdn "$tenant_id" "payer")
+    detection_status=$?
+    set -e
+    if [[ $detection_status -ne 0 ]] || [[ -z "$payer_msisdn" ]]; then
+        echo -e "${RED}Error: Could not auto-detect payer MSISDN from tenant $tenant_id${RESET}" >&2
+        echo -e "${RED}Please ensure clients exist or specify -p <payer_msisdn>${RESET}" >&2
+        exit 1
+    fi
+    echo "✓ Auto-detected payer MSISDN: $payer_msisdn"
+    echo ""
+fi
+
+# Auto-detect payee MSISDN if not provided
+if [[ -z "$payee_msisdn" ]]; then
+    echo "🔍 Auto-detecting payee MSISDN from tenant: $payee_dfsp_id..."
+    set +e
+    payee_msisdn=$(get_first_client_msisdn "$payee_dfsp_id" "payee")
+    detection_status=$?
+    set -e
+    if [[ $detection_status -ne 0 ]] || [[ -z "$payee_msisdn" ]]; then
+        echo -e "${RED}Error: Could not auto-detect payee MSISDN from tenant $payee_dfsp_id${RESET}" >&2
+        echo -e "${RED}Please ensure clients exist or specify -r <payee_msisdn>${RESET}" >&2
+        exit 1
+    fi
+    echo "✓ Auto-detected payee MSISDN: $payee_msisdn"
     echo ""
 fi
 
