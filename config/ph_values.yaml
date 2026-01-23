@@ -76,6 +76,14 @@ ph-ee-engine:
               key: aws-secret-key
         - name: APPLICATION_BUCKET-NAME
           value: "paymenthub-ee"
+        - name: JAVA_TOOL_OPTIONS
+          value: |
+            -Xms128m
+            -Xmx256m
+            -XX:+UseSerialGC
+            -XX:ReservedCodeCacheSize=64m
+            -XX:MaxMetaspaceSize=128m
+            -XX:+HeapDumpOnOutOfMemoryError
     ingress:
       enabled: true
       className: nginx
@@ -295,6 +303,17 @@ ph-ee-engine:
             -XX:ReservedCodeCacheSize=64m
             -XX:MaxMetaspaceSize=128m
             -XX:+HeapDumpOnOutOfMemoryError
+
+  mockpayment:
+    extraEnvs:
+      - name: JAVA_TOOL_OPTIONS
+        value: |
+          -Xms64m
+          -Xmx256m
+          -XX:+UseSerialGC
+          -XX:ReservedCodeCacheSize=64m
+          -XX:MaxMetaspaceSize=128m
+          -XX:+HeapDumpOnOutOfMemoryError
 
   post_installation_job:
     enabled: false
@@ -519,7 +538,7 @@ ph-ee-engine:
 
   zeebe_ops:
     enabled: true
-    image: docker.io/openmf/ph-ee-zeebe-ops:v1.4.0-gazelle-1.1.0
+    image: docker.io/openmf/ph-ee-zeebe-ops:mifos-v2.0.0
     readinessProbe:
       initialDelaySeconds: 60
     livenessProbe:
