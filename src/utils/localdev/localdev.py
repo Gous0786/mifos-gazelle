@@ -412,18 +412,15 @@ class LocalDevPatcher:
         # Get component configuration
         directory = Path(self._expand_vars(comp_config['directory']))
         app_type = comp_config.get('app_type', 'springboot')  # Default to springboot for backward compatibility
-
-        # For webapp type, skip patching - configure via values.yaml instead
-        if app_type == 'webapp':
-            print(f"\n⏭️  Skipping deployment patch for {component}")
-            print(f"  ℹ️  Webapp components should be configured via values.yaml")
-            print(f"  💡 See config/ph_values.yaml deployment.extraVolumeMounts and deployment.extraVolumes")
-            print(f"  ✅ Use --checkout to clone the repository")
-            return True
-
         image = comp_config.get('image', '')  # Optional for webapp type
         jarpath = comp_config.get('jarpath', '')  # Optional for webapp type
         hostpath = self._expand_vars(comp_config['hostpath'])
+
+        # For webapp type, we'll patch the template directly (no JAR path needed)
+        # Skip only if we don't have the required hostpath
+        if app_type == 'webapp' and not hostpath:
+            print(f"❌ Webapp component '{component}' requires 'hostpath' in config")
+            return False
 
         deployment_file = directory / "templates" / "deployment.yaml"
         backup_file = deployment_file.parent / f"_deployment.yaml.backup"
@@ -653,16 +650,17 @@ class LocalDevPatcher:
                     result_lines.append(lines[i])
                     i += 1
 
-                # Add our volumeMount - only for springboot type
-                # For webapp type, volumeMounts should be managed via values.yaml to avoid conflicts
+                # Add our volumeMount based on app type
                 if app_type == 'springboot':
                     result_lines.append(' ' * (indent + 2) + '- name: local-code')
                     result_lines.append(' ' * (indent + 4) + 'mountPath: /app # Mount your local code into /app in the container')
                     if debug:
                         print(f"    -> Added volumeMount for springboot")
                 elif app_type == 'webapp':
+                    result_lines.append(' ' * (indent + 2) + '- name: local-code')
+                    result_lines.append(' ' * (indent + 4) + 'mountPath: /usr/share/nginx/html # Mount your built webapp files')
                     if debug:
-                        print(f"    -> Skipping volumeMount for webapp (configure via values.yaml extraVolumeMounts)")
+                        print(f"    -> Added volumeMount for webapp")
 
                 volumemounts_patched = True
                 continue

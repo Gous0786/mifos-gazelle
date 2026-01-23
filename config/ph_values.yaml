@@ -25,21 +25,6 @@ ph-ee-engine:
       PH_PLATFORM_TENANT_ID: greenbank
       PH_PLATFORM_TENANT_IDS: "greenbank,bluebank,redbank"
       PH_REGISTERING_INSTITUTION_ID: 123
-    deployment:
-      extraVolumeMounts:
-        - name: nginx-spa-config
-          mountPath: /etc/nginx/conf.d/default.conf
-          subPath: default.conf
-        - name: ops-web-dist
-          mountPath: /usr/share/nginx/html
-      extraVolumes:
-        - name: nginx-spa-config
-          configMap:
-            name: nginx-spa-config
-        - name: ops-web-dist
-          hostPath:
-            path: /home/tdaly/ph-ee-operations-web/dist/web-app
-            type: Directory
 
   operations_app:
     enabled: true
