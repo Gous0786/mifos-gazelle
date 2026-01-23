@@ -30,6 +30,9 @@ TENANTS = {
 # Only register payee tenants with identity-account-mapper (beneficiaries)
 # Payer tenants (greenbank, redbank) don't need identity-account-mapper registration
 IDENTITY_MAPPER_TENANTS = {"bluebank"}
+# Payer/government institutions that register beneficiaries for G2P programs
+# Beneficiaries will be registered under ALL of these institutions
+REGISTERING_INSTITUTIONS = ["greenbank", "redbank"]
 FIRST_NAMES = [
     "Alice", "Bob", "Charlie", "Diana", "Ethan",
     "Fiona", "George", "Hannah", "Isaac", "Julia",
@@ -408,8 +411,15 @@ def register_client_with_vnext(headers, tenant_id, mobile_number, currency="USD"
         return True
     return False
 
-def register_beneficiary_with_identity_mapper(tenant_id, mobile_number, account_id):
-    """Register beneficiary with identity-account-mapper."""
+def register_beneficiary_with_identity_mapper(tenant_id, mobile_number, account_id, registering_institution):
+    """Register beneficiary with identity-account-mapper.
+
+    Args:
+        tenant_id: The payee FSP where beneficiary has an account (e.g., 'bluebank')
+        mobile_number: Beneficiary MSISDN
+        account_id: Beneficiary account number at the payee FSP
+        registering_institution: The payer/government institution (e.g., 'greenbank', 'redbank')
+    """
     if not mobile_number or not account_id:
         return False
 
@@ -421,18 +431,18 @@ def register_beneficiary_with_identity_mapper(tenant_id, mobile_number, account_
         "payeeIdentity": mobile_number,
         "paymentModality": "00",  # MSISDN payment modality
         "financialAddress": str(account_id),
-        "bankingInstitutionCode": tenant_id
+        "bankingInstitutionCode": tenant_id  # Payee FSP
     }
 
     payload = {
         "requestID": request_id,  # Note: capital ID required
-        "sourceBBID": tenant_id,
+        "sourceBBID": registering_institution,  # Payer/government institution
         "beneficiaries": [beneficiary]
     }
 
     mapper_headers = {
         "X-CallbackURL": "https://localhost/callback",  # Dummy callback URL
-        "X-Registering-Institution-ID": tenant_id,
+        "X-Registering-Institution-ID": registering_institution,  # Payer/government institution
         "Content-Type": "application/json",
         "Accept": "application/json"
     }
@@ -447,7 +457,7 @@ def register_beneficiary_with_identity_mapper(tenant_id, mobile_number, account_
         try:
             resp_json = response.json()
             if 'responseCode' in resp_json:
-                print(f"✓ Registered {mobile_number} → account {account_id} @ {tenant_id}", file=sys.stderr)
+                print(f"✓ Registered {mobile_number} → account {account_id} @ {tenant_id} (payer: {registering_institution})", file=sys.stderr)
                 print(f"   Response: {resp_json.get('responseDescription', 'OK')}", file=sys.stderr)
                 return True
         except:
@@ -455,7 +465,7 @@ def register_beneficiary_with_identity_mapper(tenant_id, mobile_number, account_
 
         # If 2xx status, consider it success
         if 200 <= response.status_code < 300:
-            print(f"✓ Registered {mobile_number} → account {account_id} @ {tenant_id}", file=sys.stderr)
+            print(f"✓ Registered {mobile_number} → account {account_id} @ {tenant_id} (payer: {registering_institution})", file=sys.stderr)
             return True
 
         # Otherwise report error
@@ -536,13 +546,16 @@ if __name__ == "__main__":
         # Register clients with identity-account-mapper (payees only) and vNext (all)
         print("\nRegistering clients with identity-account-mapper and vNext...", file=sys.stderr)
         print(f"  Identity-mapper payee tenants: {', '.join(IDENTITY_MAPPER_TENANTS)}", file=sys.stderr)
+        print(f"  Registering under payers: {', '.join(REGISTERING_INSTITUTIONS)}", file=sys.stderr)
         mapper_success_count = 0
         vnext_success_count = 0
         for client in all_clients:
             # Register with identity-account-mapper (only for payee tenants)
+            # Register under ALL payer institutions (greenbank, redbank)
             if client['tenant'] in IDENTITY_MAPPER_TENANTS:
-                if register_beneficiary_with_identity_mapper(client['tenant'], client['mobile'], client['account_id']):
-                    mapper_success_count += 1
+                for payer in REGISTERING_INSTITUTIONS:
+                    if register_beneficiary_with_identity_mapper(client['tenant'], client['mobile'], client['account_id'], payer):
+                        mapper_success_count += 1
             else:
                 print(f"  Skipping identity-mapper for payer tenant: {client['tenant']} ({client['mobile']})", file=sys.stderr)
 
@@ -638,8 +651,10 @@ if __name__ == "__main__":
                 register_client_with_vnext(HEADERS, tenant_id, mobile)
 
                 # Only register payee tenants with identity-account-mapper
+                # Register under ALL payer institutions (greenbank, redbank)
                 if tenant_id in IDENTITY_MAPPER_TENANTS:
-                    register_beneficiary_with_identity_mapper(tenant_id, mobile, acct_id)
+                    for payer in REGISTERING_INSTITUTIONS:
+                        register_beneficiary_with_identity_mapper(tenant_id, mobile, acct_id, payer)
                 else:
                     print(f"Skipping identity-mapper for payer tenant {tenant_id}", file=sys.stderr)
 
@@ -683,8 +698,10 @@ if __name__ == "__main__":
             register_client_with_vnext(HEADERS, tenant_id, mobile)
 
             # identity-account-mapper (only for payee tenants)
+            # Register under ALL payer institutions (greenbank, redbank)
             if tenant_id in IDENTITY_MAPPER_TENANTS:
-                register_beneficiary_with_identity_mapper(tenant_id, mobile, acct_id)
+                for payer in REGISTERING_INSTITUTIONS:
+                    register_beneficiary_with_identity_mapper(tenant_id, mobile, acct_id, payer)
             else:
                 print(f"Skipping identity-mapper for payer tenant {tenant_id}", file=sys.stderr)
 
