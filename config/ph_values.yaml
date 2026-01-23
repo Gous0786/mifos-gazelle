@@ -287,6 +287,14 @@ ph-ee-engine:
           value: "greenbank"
         - name: parties_1_fspId
           value: "bluebank"
+        - name: JAVA_TOOL_OPTIONS
+          value: |
+            -Xms128m
+            -Xmx256m
+            -XX:+UseSerialGC
+            -XX:ReservedCodeCacheSize=64m
+            -XX:MaxMetaspaceSize=128m
+            -XX:+HeapDumpOnOutOfMemoryError
 
   post_installation_job:
     enabled: false
@@ -415,19 +423,6 @@ ph-ee-engine:
               port:
                 number: 8443
 
-  ph_ee_connector_bulk:
-    enabled: true
-    image: docker.io/openmf/ph-ee-connector-bulk:mifos-v2.0.0
-    extraEnvs:
-    - name: CHANNEL_CONTACTPOINT
-      value: https://ph-ee-connector-channel:8443
-    - name: CHANNEL_ENDPOINTS_BATCH-TRANSACTION
-      value: /channel/transfer
-    - name: BULK-PROCESSOR_ENDPOINTS_BATCH-EXECUTION
-      value: /batchtransactions/execution
-    - name: JAVA_TOOL_OPTIONS
-      value: "-Xms64m -Xmx128m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:+HeapDumpOnOutOfMemoryError"
-
   channel:
     enabled: true
     image: openmf/ph-ee-connector-channel:mifos-v2.0.0
@@ -440,7 +435,15 @@ ph-ee-engine:
       clientSecret: "password"
       tenant: "bluebank"
     DESTINATION_DFSPID: "bluebank"
-
+    extraEnvs:
+      - name: JAVA_TOOL_OPTIONS
+        value: |
+          -Xms128m
+          -Xmx256m
+          -XX:+UseSerialGC
+          -XX:ReservedCodeCacheSize=64m
+          -XX:MaxMetaspaceSize=128m
+          -XX:+HeapDumpOnOutOfMemoryError
 
     ingress:
       enabled: true
