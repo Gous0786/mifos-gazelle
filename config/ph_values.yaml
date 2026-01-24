@@ -17,11 +17,11 @@ ph-ee-engine:
     enabled: true
     image: docker.io/openmf/ph-ee-operations-web:mifos-v2.0.0
     backend:
-      PH_OPS_BACKEND_SERVER_URL: https://ops-bk.mifos.gazelle.localhost/api/v1
-      PH_VOU_BACKEND_SERVER_URL: https://ops-bk.mifos.gazelle.localhost/api/v1
-      PH_ACT_BACKEND_SERVER_URL: https://ops-bk.mifos.gazelle.localhost/api/v1
-      PH_OPS_BULK_CONNECTOR_URL: https://bulk-processor.mifos.gazelle.localhost
-      PH_OPS_SIGNATURE_URL: https://ops.mifos.gazelle.localhost/api/v1/util/x-signature
+      PH_OPS_BACKEND_SERVER_URL: https://ops-bk.mifos.gazelle.test/api/v1
+      PH_VOU_BACKEND_SERVER_URL: https://ops-bk.mifos.gazelle.test/api/v1
+      PH_ACT_BACKEND_SERVER_URL: https://ops-bk.mifos.gazelle.test/api/v1
+      PH_OPS_BULK_CONNECTOR_URL: https://bulk-processor.mifos.gazelle.test
+      PH_OPS_SIGNATURE_URL: https://ops.mifos.gazelle.test/api/v1/util/x-signature
       PH_PLATFORM_TENANT_ID: greenbank
       PH_PLATFORM_TENANT_IDS: "greenbank,bluebank,redbank"
       PH_REGISTERING_INSTITUTION_ID: 123
@@ -30,6 +30,13 @@ ph-ee-engine:
     enabled: true
     image: docker.io/openmf/ph-ee-operations-app:mifos-v2.0.0
     imagePullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 100m
+        memory: 384Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
     deployment:
       extraEnvs:
         - name: CLOUD_AWS_S3BASEURL
@@ -78,7 +85,7 @@ ph-ee-engine:
         kubernetes.io/ingress.class: nginx
         nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
         nginx.ingress.kubernetes.io/enable-cors: "true"
-        nginx.ingress.kubernetes.io/cors-allow-origin: "https://ops.mifos.gazelle.localhost"
+        nginx.ingress.kubernetes.io/cors-allow-origin: "https://ops.mifos.gazelle.test"
         nginx.ingress.kubernetes.io/cors-allow-methods: "PUT, GET, POST, OPTIONS, DELETE, PATCH"
         nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,Platform-TenantId,platform-tenantid,purpose,type,x-callback-url,x-correlationid,x-correlation-id,X-Correlation-ID,x-program-id,x-registering-institution-id,x-signature,Sec-Fetch-Dest,Sec-Fetch-Mode,Sec-Fetch-Site,Sec-GPC,Pragma"
         nginx.ingress.kubernetes.io/cors-expose-headers: "Content-Length,Content-Range,X-Correlation-ID,x-correlation-id"
@@ -88,10 +95,10 @@ ph-ee-engine:
         nginx.ingress.kubernetes.io/log-format: '$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" "$http_x_forwarded_for" $request_uri'
       tls:
       - hosts:
-        - ops-bk.mifos.gazelle.localhost
+        - ops-bk.mifos.gazelle.test
         secretName: sandbox-secret
       hosts:
-        - host: ops-bk.mifos.gazelle.localhost
+        - host: ops-bk.mifos.gazelle.test
           paths:
           - path: "/"
             backend:
@@ -201,7 +208,7 @@ ph-ee-engine:
 
       ingress:
         enabled: true
-        host: "zeebe-gateway.mifos.gazelle.localhost"
+        host: "zeebe-gateway.mifos.gazelle.test"
 
     operate:
       enabled: true
@@ -228,7 +235,7 @@ ph-ee-engine:
 
       ingress:
         enabled: true
-        host: "zeebe-operate.mifos.gazelle.localhost"
+        host: "zeebe-operate.mifos.gazelle.test"
 
     tasklist:
       enabled: false
@@ -250,6 +257,13 @@ ph-ee-engine:
     enabled: true
     image: docker.io/openmf/ph-ee-connector-mojaloop-java:mifos-v2.0.0
     imagePullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 100m
+        memory: 384Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
     ingress:
       enabled: true
       className: nginx
@@ -290,11 +304,18 @@ ph-ee-engine:
             -XX:+HeapDumpOnOutOfMemoryError
 
   mockpayment:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 192Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
     extraEnvs:
       - name: JAVA_TOOL_OPTIONS
         value: |
           -Xms64m
-          -Xmx256m
+          -Xmx128m
           -XX:+UseSerialGC
           -XX:ReservedCodeCacheSize=64m
           -XX:MaxMetaspaceSize=128m
@@ -306,19 +327,30 @@ ph-ee-engine:
   integration_test:
     enableAMSTest: false
     enableGOVTest: false
-    enableGazelleTest: true 
+    enableGazelleTest: true
     imagePullPolicy: IfNotPresent
     image: docker.io/openmf/ph-ee-integration-test:v1.6.2-gazelle
     imagePullPolicy: IfNotPresent
     testTags: "@gov and not @ext"
     memoryRequest: "500k"
     testResultsOutputDir: "/tmp"
-
-
+    resources:
+      requests:
+        cpu: 100m
+        memory: 384Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
     deployment:
       extraEnvs:
         - name: JAVA_TOOL_OPTIONS
-          value: "-Xms64m -Xmx256m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:+HeapDumpOnOutOfMemoryError"
+          value: |
+            -Xms64m
+            -Xmx256m
+            -XX:+UseSerialGC
+            -XX:ReservedCodeCacheSize=64m
+            -XX:MaxMetaspaceSize=128m
+            -XX:+HeapDumpOnOutOfMemoryError
     ingress:
       enabled: true
       className: nginx
@@ -327,7 +359,7 @@ ph-ee-engine:
       annotations:
         nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
         nginx.ingress.kubernetes.io/enable-cors: "true"
-        nginx.ingress.kubernetes.io/cors-allow-origin: "https://ops.mifos.gazelle.localhost"
+        nginx.ingress.kubernetes.io/cors-allow-origin: "https://ops.mifos.gazelle.test"
         nginx.ingress.kubernetes.io/cors-allow-methods: "PUT, GET, POST, OPTIONS, DELETE, PATCH"
         nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,Platform-TenantId,platform-tenantid,purpose,type,x-callback-url,x-correlationid,x-correlation-id,X-Correlation-ID,x-program-id,x-registering-institution-id,x-signature,Sec-Fetch-Dest,Sec-Fetch-Mode,Sec-Fetch-Site,Sec-GPC,Pragma"
         nginx.ingress.kubernetes.io/cors-expose-headers: "Content-Length,Content-Range,X-Correlation-ID,x-correlation-id"
@@ -338,7 +370,7 @@ ph-ee-engine:
       tls:
         - secretName: sandbox-secret
       hosts:
-        - host: ops-bk.mifos.gazelle.localhost
+        - host: ops-bk.mifos.gazelle.test
           paths:
           - path: "/"
             backend:
@@ -353,6 +385,13 @@ ph-ee-engine:
     imagePullPolicy: IfNotPresent
     camel_disable_ssl: false  # End-to-end TLS
     tenants: "greenbank,bluebank,redbank"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 384Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
     operations_app:
       contactpoint: "http://ph-ee-operations-app:80"
       endpoints:
@@ -379,7 +418,7 @@ ph-ee-engine:
         enable: true
         completion_rate: 95
       deduplication:
-        enabled: true      
+        enabled: true
 
     deployment:
       extraEnvs:
@@ -405,7 +444,7 @@ ph-ee-engine:
         nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"  # End-to-end TLS
         nginx.ingress.kubernetes.io/backend-protocol-ssl-verify: "false"  # Self-signed cert in backend
         nginx.ingress.kubernetes.io/enable-cors: "true"
-        nginx.ingress.kubernetes.io/cors-allow-origin: "https://ops.mifos.gazelle.localhost"
+        nginx.ingress.kubernetes.io/cors-allow-origin: "https://ops.mifos.gazelle.test"
         nginx.ingress.kubernetes.io/cors-allow-methods: "PUT, GET, POST, OPTIONS, DELETE, PATCH"
         nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,Platform-TenantId,platform-tenantid,purpose,type,x-callback-url,x-correlationid,x-correlation-id,X-Correlation-ID,x-program-id,x-registering-institution-id,x-signature,Sec-Fetch-Dest,Sec-Fetch-Mode,Sec-Fetch-Site,Sec-GPC,Pragma"
         nginx.ingress.kubernetes.io/cors-expose-headers: "Content-Length,Content-Range,X-Correlation-ID,x-correlation-id"
@@ -415,10 +454,10 @@ ph-ee-engine:
         nginx.ingress.kubernetes.io/log-format: '$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" "$http_x_forwarded_for" $request_uri'
       tls:
       - hosts:
-        - bulk-processor.mifos.gazelle.localhost
+        - bulk-processor.mifos.gazelle.test
         secretName: sandbox-secret
       hosts:
-      - host: bulk-processor.mifos.gazelle.localhost
+      - host: bulk-processor.mifos.gazelle.test
         paths:
         - path: /batchtransactions
           backend:
@@ -430,6 +469,13 @@ ph-ee-engine:
   channel:
     enabled: true
     image: openmf/ph-ee-connector-channel:mifos-v2.0.0
+    resources:
+      requests:
+        cpu: 50m
+        memory: 192Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
     tenantPrimary:
       clientId: "mifos"
       clientSecret: "password"
@@ -442,8 +488,8 @@ ph-ee-engine:
     extraEnvs:
       - name: JAVA_TOOL_OPTIONS
         value: |
-          -Xms128m
-          -Xmx256m
+          -Xms64m
+          -Xmx128m
           -XX:+UseSerialGC
           -XX:ReservedCodeCacheSize=64m
           -XX:MaxMetaspaceSize=128m
@@ -457,10 +503,10 @@ ph-ee-engine:
         nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
       tls:
       - hosts:
-        - channel.mifos.gazelle.localhost
+        - channel.mifos.gazelle.test
         secretName: sandbox-secret
       hosts:
-        - host: channel.mifos.gazelle.localhost          
+        - host: channel.mifos.gazelle.test          
           paths: 
           - path: /
             backend:
@@ -468,7 +514,7 @@ ph-ee-engine:
                 name: ph-ee-connector-channel
                 port:
                   number: 8443
-        - host: channel-gsma.mifos.gazelle.localhost          
+        - host: channel-gsma.mifos.gazelle.test          
           paths:          
           - path: /
             backend:
@@ -480,7 +526,7 @@ ph-ee-engine:
   minio:
     ingress:
       hosts:
-        - minio.mifos.gazelle.localhost
+        - minio.mifos.gazelle.test
     resources:
       requests:
         memory: 128Mi
@@ -491,7 +537,7 @@ ph-ee-engine:
       annotations: {}
       path: /
       hosts:
-        - minio-console.mifos.gazelle.localhost
+        - minio-console.mifos.gazelle.test
         
   kafka:
     enabled: true
@@ -507,6 +553,13 @@ ph-ee-engine:
   ph_ee_connector_bulk:
     enabled: true
     image: docker.io/openmf/ph-ee-connector-bulk:mifos-v2.0.0
+    resources:
+      requests:
+        cpu: 50m
+        memory: 192Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
     extraEnvs:
       - name: CHANNEL_CONTACTPOINT
         value: "https://ph-ee-connector-channel:8443"
@@ -515,15 +568,44 @@ ph-ee-engine:
       - name: BULK-PROCESSOR_ENDPOINTS_BATCH-EXECUTION
         value: "/batchtransactions/execution"
       - name: JAVA_TOOL_OPTIONS
-        value: "-Xms64m -Xmx128m -XX:+ExitOnOutOfMemoryError -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:+HeapDumpOnOutOfMemoryError"
+        value: |
+          -Xms64m
+          -Xmx128m
+          -XX:+UseSerialGC
+          -XX:ReservedCodeCacheSize=64m
+          -XX:MaxMetaspaceSize=128m
+          -XX:+HeapDumpOnOutOfMemoryError
   
   importer_rdbms:
     enabled: true
     image: docker.io/openmf/ph-ee-importer-rdbms:mifos-v2.0.0
+    resources:
+      requests:
+        cpu: 50m
+        memory: 192Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
+    extraEnvs:
+      - name: JAVA_TOOL_OPTIONS
+        value: |
+          -Xms64m
+          -Xmx128m
+          -XX:+UseSerialGC
+          -XX:ReservedCodeCacheSize=64m
+          -XX:MaxMetaspaceSize=128m
+          -XX:+HeapDumpOnOutOfMemoryError
 
   zeebe_ops:
     enabled: true
     image: docker.io/openmf/ph-ee-zeebe-ops:mifos-v2.0.0
+    resources:
+      requests:
+        cpu: 100m
+        memory: 384Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
     readinessProbe:
       initialDelaySeconds: 60
     livenessProbe:
@@ -531,14 +613,13 @@ ph-ee-engine:
     deployment:
       extraEnvs:
         - name: JAVA_TOOL_OPTIONS
-          value: "-Xms128m -Xmx256m -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=128m -XX:+HeapDumpOnOutOfMemoryError"
-
-    limits:
-      memory: "768M"
-      cpu: "500m"
-    requests:
-      memory: "512M"
-      cpu: "50m"
+          value: |
+            -Xms128m
+            -Xmx256m
+            -XX:+UseSerialGC
+            -XX:ReservedCodeCacheSize=64m
+            -XX:MaxMetaspaceSize=128m
+            -XX:+HeapDumpOnOutOfMemoryError
 
   ph_ee_connector_gsma:
     enabled: false
@@ -548,7 +629,20 @@ ph-ee-engine:
   ph_ee_connector_ams_mifos:
     enabled: true
     image: docker.io/openmf/ph-ee-connector-ams-mifos:mifos-v2.0.0
+    resources:
+      requests:
+        cpu: 100m
+        memory: 384Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
     deployment:
       extraEnvs:
         - name: JAVA_TOOL_OPTIONS
-          value: -Xms128m -Xmx256m
+          value: |
+            -Xms128m
+            -Xmx256m
+            -XX:+UseSerialGC
+            -XX:ReservedCodeCacheSize=64m
+            -XX:MaxMetaspaceSize=128m
+            -XX:+HeapDumpOnOutOfMemoryError
