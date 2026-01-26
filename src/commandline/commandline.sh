@@ -114,7 +114,7 @@ function loadConfigFromFile() {
 
     # Read app enablement flags and construct the 'apps' variable
     local enabled_apps_list=""
-    local valid_apps=("infra" "vnext" "phee" "mifosx")
+    local valid_apps=("infra" "vnext" "phee" "mifosx" "mastercard-demo")
 
     for app_name in "${valid_apps[@]}"; do
         local app_enabled=$(crudini --get "$config_path" "$app_name" enabled 2>/dev/null)
@@ -134,6 +134,7 @@ function loadConfigFromFile() {
         [vnext]="VNEXTBRANCH VNEXTREPO_DIR VNEXT_NAMESPACE VNEXT_REPO_LINK"
         [phee]="PHBRANCH PHREPO_DIR PH_NAMESPACE PH_RELEASE_NAME PH_REPO_LINK PH_EE_ENV_TEMPLATE_REPO_LINK PH_EE_ENV_TEMPLATE_REPO_BRANCH PH_EE_ENV_TEMPLATE_REPO_DIR"
         [mifosx]="MIFOSX_NAMESPACE MIFOSX_REPO_DIR MIFOSX_BRANCH MIFOSX_REPO_LINK"
+        [mastercard-demo]="MASTERCARD_NAMESPACE MASTERCARD_REPO_DIR MASTERCARD_BRANCH MASTERCARD_REPO_LINK MASTERCARD_CBS_HOME MASTERCARD_USE_MOCK MASTERCARD_API_URL MASTERCARD_LOCALDEV_ENABLED"
         [kubernetes]="helm_version k8s_version min_ram min_free_space linux_os_list ubuntu_ok_versions_list"
     )
 
@@ -186,7 +187,7 @@ function showUsage {
     -f config_file_path .. Specify an alternative config.ini file path (optional)
     -m mode .............. deploy|cleanapps|cleanall (required)
     -u user .............. (non root) user that the process will use for execution (required)
-    -a apps .............. Comma-separated list of apps (vnext,phee,mifosx,infra) or 'all' (optional)
+    -a apps .............. Comma-separated list of apps (vnext,phee,mifosx,infra,mastercard-demo) or 'all' (optional)
     -e environment ....... Cluster environment (local or remote, optional, default=local)
     -d debug ............. Enable debug mode (true|false, optional, default=false)
     -r redeploy .......... Force redeployment of apps (true|false, optional, default=true)
@@ -242,8 +243,8 @@ function validateInputs {
             echo "No specific apps provided with -a flag or config file. Defaulting to 'all'."
             apps="all"
         fi
-        # TODO -> ALL VALID APPS should be from enabled list from config.ini  
-        local ALL_VALID_APPS="infra vnext phee mifosx all"
+        # TODO -> ALL VALID APPS should be from enabled list from config.ini
+        local ALL_VALID_APPS="infra vnext phee mifosx mastercard-demo all"
         local CORE_APPS="infra vnext phee mifosx"
 
         local current_apps_array

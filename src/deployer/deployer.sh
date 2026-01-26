@@ -4,7 +4,8 @@
 source "$RUN_DIR/src/deployer/core.sh" || { echo "FATAL: Could not source core.sh. Check RUN_DIR: $RUN_DIR"; exit 1; }
 source "$RUN_DIR/src/deployer/vnext.sh" || { echo "FATAL: Could not source vnext.sh. Check RUN_DIR: $RUN_DIR"; exit 1; }
 source "$RUN_DIR/src/deployer/mifosx.sh" || { echo "FATAL: Could not source mifosx.sh. Check RUN_DIR: $RUN_DIR"; exit 1; }
-source "$RUN_DIR/src/deployer/phee.sh"   || { echo "FATAL: Could not source phee.sh. Check RUN_DIR: $RUN_DIR"; exit 1; }  
+source "$RUN_DIR/src/deployer/phee.sh"   || { echo "FATAL: Could not source phee.sh. Check RUN_DIR: $RUN_DIR"; exit 1; }
+source "$RUN_DIR/src/deployer/mastercard.sh" || { echo "FATAL: Could not source mastercard.sh. Check RUN_DIR: $RUN_DIR"; exit 1; }
 source "$RUN_DIR/src/utils/helpers.sh" || { echo "FATAL: Could not source helpers.sh. Check RUN_DIR: $RUN_DIR"; exit 1; }
 
 #------------------------------------------------------------
@@ -325,6 +326,11 @@ function deleteApps() {
         printf "                       [ok]\n"
 
         ;;
+      "mastercard-demo")
+        printf "    deleting mastercard-demo "
+        cleanup
+        printf "                       [ok]\n"
+        ;;
       *)
         echo -e "${RED}Invalid app '$app' for deletion. This should have been caught by validateInputs.${RESET}"
         showUsage
@@ -370,6 +376,16 @@ function deployApps() {
       "phee")
         deployInfrastructure "false"
         deployPH
+        ;;
+      "mastercard-demo")
+        deployInfrastructure "false"
+        # Ensure PaymentHub is deployed before Mastercard
+        if ! run_as_user "kubectl get namespace \"$PH_NAMESPACE\"" &> /dev/null; then
+          echo -e "${RED}Error: PaymentHub namespace not found. Deploy phee first: ./run.sh -a phee${RESET}"
+          exit 1
+        fi
+        echo "MASTERCARD_CBS_HOME set to $MASTERCARD_CBS_HOME"
+        deploy_mastercard
         ;;
       *)
         echo -e "${RED}Error: Unknown application '$app' in deployment list. This should have been caught by validation.${RESET}"
