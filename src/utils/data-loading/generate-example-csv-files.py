@@ -295,6 +295,13 @@ def generate_csv_files(output_dir=None, payer_msisdn_closedloop=None, payer_msis
     files['mojaloop'] = {'path': mojaloop_path, 'payer': payer_msisdn_mojaloop, 'tenant': 'greenbank', 'rows': len(mojaloop_data)}
     print(f"✓ Generated {mojaloop_path} ({len(mojaloop_data)} rows, payer: {payer_msisdn_mojaloop}, tenant: greenbank)", file=sys.stderr)
 
+    # Generate mastercard CBS CSV with greenbank payer
+    mastercard_data = generate_csv_data('MASTERCARD_CBS', payer_msisdn_mojaloop, payees, num_rows)
+    mastercard_path = output_dir / f'bulk-gazelle-mastercard{suffix}.csv'
+    write_csv_file(mastercard_path, mastercard_data, govstack_mode=False)
+    files['mastercard'] = {'path': mastercard_path, 'payer': payer_msisdn_mojaloop, 'tenant': 'greenbank-mastercard', 'rows': len(mastercard_data)}
+    print(f"✓ Generated {mastercard_path} ({len(mastercard_data)} rows, payer: {payer_msisdn_mojaloop}, tenant: greenbank-mastercard)", file=sys.stderr)
+
     # Generate GovStack CSV (no payer columns)
     govstack_data = generate_govstack_csv_data(payees, num_rows)
     govstack_path = output_dir / f'bulk-gazelle-govstack{suffix}.csv'
@@ -340,6 +347,7 @@ Examples:
 Generated files (suffix indicates row count):
   - bulk-gazelle-closedloop-N.csv (CLOSEDLOOP mode, redbank payer)
   - bulk-gazelle-mojaloop-N.csv (MOJALOOP mode, greenbank payer)
+  - bulk-gazelle-mastercard-N.csv (MASTERCARD_CBS mode, greenbank-mastercard payer)
   - bulk-gazelle-govstack-N.csv (GovStack mode, no payer columns)
 
 Tenant/Mode mapping:
@@ -352,6 +360,13 @@ Tenant/Mode mapping:
     * Uses PayerFundTransfer workflow with Mojaloop vNext switch
     * Cross-FSP transfers with party lookup, quotes, and switch routing
     * For testing: ./submit-batch.py --csv-file bulk-gazelle-mojaloop-N.csv --tenant greenbank
+
+  - MASTERCARD_CBS → greenbank-mastercard tenant (payer), bluebank tenant (payees)
+    * Uses MastercardFundTransfer workflow with Mastercard CBS API
+    * Requires supplemental data in mastercard_cbs_supplementary_data table
+    * Implements PHEE-355 data merge logic for regulatory compliance
+    * For testing: ./submit-batch.py --csv-file bulk-gazelle-mastercard-N.csv --tenant greenbank-mastercard
+    * For GovStack mode: ./submit-batch.py --csv-file bulk-gazelle-mastercard-N.csv --tenant greenbank-mastercard --govstack --registering-institution greenbank-mastercard
 
   - GOVSTACK → Can use either redbank or greenbank as payer (specify with --registering-institution)
     * Enables identity validation via identity-account-mapper
@@ -372,7 +387,7 @@ Notes:
                        help=f'Path to config.ini (default: {default_config})')
     parser.add_argument('--output-dir', '-o', type=Path, default=default_output,
                        help=f'Output directory for CSV files (default: {default_output})')
-    parser.add_argument('--mode', '-m', choices=['closedloop', 'mojaloop', 'govstack', 'all'],
+    parser.add_argument('--mode', '-m', choices=['closedloop', 'mojaloop', 'mastercard', 'govstack', 'all'],
                        default='all',
                        help='Generate specific mode only, or all (default: all)')
     parser.add_argument('--num-rows', '-n', type=int, default=None,
@@ -457,6 +472,11 @@ Notes:
             csv_path = args.output_dir / f'bulk-gazelle-{args.mode}{suffix}.csv'
             write_csv_file(csv_path, data, govstack_mode=False)
             print(f"✓ Generated {csv_path} ({len(data)} rows, payer: {args.payer_msisdn_mojaloop}, tenant: greenbank)", file=sys.stderr)
+        elif args.mode == 'mastercard':
+            data = generate_csv_data('MASTERCARD_CBS', args.payer_msisdn_mojaloop, payees, args.num_rows)
+            csv_path = args.output_dir / f'bulk-gazelle-{args.mode}{suffix}.csv'
+            write_csv_file(csv_path, data, govstack_mode=False)
+            print(f"✓ Generated {csv_path} ({len(data)} rows, payer: {args.payer_msisdn_mojaloop}, tenant: greenbank-mastercard)", file=sys.stderr)
 
     print("\n============================================================", file=sys.stderr)
     total_txns = len(payees) * len(payees[0]['amounts']) if payees else 0
@@ -465,6 +485,8 @@ Notes:
         print(f"  CLOSEDLOOP payer: {args.payer_msisdn_closedloop} (redbank)", file=sys.stderr)
     if args.mode == 'all' or args.mode == 'mojaloop':
         print(f"  MOJALOOP payer: {args.payer_msisdn_mojaloop} (greenbank)", file=sys.stderr)
+    if args.mode == 'all' or args.mode == 'mastercard':
+        print(f"  MASTERCARD_CBS payer: {args.payer_msisdn_mojaloop} (greenbank-mastercard)", file=sys.stderr)
     for payee in payees[:5]:  # Show first 5 payees
         print(f"  Payee: {payee['name']} ({payee['msisdn']}) - account {payee['account']}", file=sys.stderr)
     if len(payees) > 5:

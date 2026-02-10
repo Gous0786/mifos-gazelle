@@ -126,27 +126,31 @@ function loadConfigFromFile() {
     done
     apps=$(echo "$enabled_apps_list" | xargs)
 
-    # Override supported global variables from config.ini
-    declare -A override_map=(
-        [general]="GAZELLE_DOMAIN GAZELLE_VERSION"
-        [mysql]="MYSQL_SERVICE_NAME MYSQL_SERVICE_PORT LOCAL_PORT MAX_WAIT_SECONDS MYSQL_HOST"
-        [infra]="INFRA_NAMESPACE INFRA_RELEASE_NAME"
-        [vnext]="VNEXTBRANCH VNEXTREPO_DIR VNEXT_NAMESPACE VNEXT_REPO_LINK"
-        [phee]="PHBRANCH PHREPO_DIR PH_NAMESPACE PH_RELEASE_NAME PH_REPO_LINK PH_EE_ENV_TEMPLATE_REPO_LINK PH_EE_ENV_TEMPLATE_REPO_BRANCH PH_EE_ENV_TEMPLATE_REPO_DIR"
-        [mifosx]="MIFOSX_NAMESPACE MIFOSX_REPO_DIR MIFOSX_BRANCH MIFOSX_REPO_LINK"
-        [mastercard-demo]="MASTERCARD_NAMESPACE MASTERCARD_REPO_DIR MASTERCARD_BRANCH MASTERCARD_REPO_LINK MASTERCARD_CBS_HOME MASTERCARD_USE_MOCK MASTERCARD_API_URL MASTERCARD_LOCALDEV_ENABLED"
-        [kubernetes]="helm_version k8s_version min_ram min_free_space linux_os_list ubuntu_ok_versions_list"
-    )
+    # Dynamically load all variables from config.ini sections
+    # Get all sections from config file
+    local all_sections=$(crudini --get "$config_path" 2>/dev/null)
 
-    for section in "${!override_map[@]}"; do
-        for var_name in ${override_map[$section]}; do
-            value=$(crudini --get "$config_path" "$section" "$var_name" 2>/dev/null)
-            if [[ -n "$value" ]]; then
-                eval "$var_name=\"\$value\""
-                export "$var_name"
-                #logWithLevel "$INFO" "Overridden from config [$section]: $var_name=$value"
+    for section in $all_sections; do
+        # Get all keys in this section
+        local section_keys=$(crudini --get "$config_path" "$section" 2>/dev/null || true)
+
+        # Export each key-value pair
+        while IFS= read -r var_name; do
+            if [[ -n "$var_name" ]]; then
+                # Check if variable is already set to a non-empty value (preserves special handling like k8s_user)
+                current_value="${!var_name:-}"
+                if [[ -z "$current_value" ]]; then
+                    value=$(crudini --get "$config_path" "$section" "$var_name" 2>/dev/null)
+                    if [[ -n "$value" ]]; then
+                        # Store value as-is, let bash expand variables when referenced
+                        eval "export $var_name=\"\$value\""
+                        #logWithLevel "$INFO" "Loaded from config [$section]: $var_name=$value"
+                    fi
+                #else
+                    #logWithLevel "$INFO" "Skipped (already set) [$section]: $var_name=$current_value"
+                fi
             fi
-        done
+        done <<< "$section_keys"
     done
 }
 

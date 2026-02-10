@@ -136,6 +136,7 @@ function deployHelmChartFromDir() {
 
 #------------------------------------------------------------
 # Description : Creates a K8s namespace if it doesn't exist.
+#               Configures Docker Hub authentication if credentials available.
 # Usage : createNamespace <namespace>
 # Example: createNamespace mifosx-ns
 #------------------------------------------------------------
@@ -147,6 +148,13 @@ function createNamespace() {
     # Create the namespace
     run_as_user "kubectl create namespace \"$namespace\"" >> /dev/null 2>&1
     check_command_execution $? "kubectl create namespace $namespace"
+  fi
+
+  # Configure Docker Hub authentication for this namespace
+  # Script exits silently if DOCKERHUB_USERNAME/PASSWORD not set
+  if [[ -f "$UTILS_DIR/k3s-docker-login.sh" ]]; then
+    # Pass env vars explicitly through su command
+    run_as_user "export DOCKERHUB_USERNAME='${DOCKERHUB_USERNAME:-}' DOCKERHUB_PASSWORD='${DOCKERHUB_PASSWORD:-}' DOCKERHUB_EMAIL='${DOCKERHUB_EMAIL:-}'; $UTILS_DIR/k3s-docker-login.sh \"$namespace\""
   fi
 }
 
@@ -394,6 +402,9 @@ function deployApps() {
         ;;
     esac
   done
+
+  # Configure Docker Hub authentication if credentials are available
+  configure_dockerhub_auth
 
   print_deployment_end_message
 }

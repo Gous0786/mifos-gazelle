@@ -34,13 +34,8 @@ log_error() {
     echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} ERROR: $*" >&2
 }
 
-# Configuration from config.ini or defaults
-MASTERCARD_NAMESPACE="${MASTERCARD_NAMESPACE:-mastercard-demo}"
-MASTERCARD_ENABLED="${MASTERCARD_ENABLED:-true}"
-MASTERCARD_CBS_HOME="${MASTERCARD_CBS_HOME:-$HOME/ph-ee-connector-mccbs}"
-MASTERCARD_USE_MOCK="${MASTERCARD_USE_MOCK:-true}"
-MASTERCARD_API_URL="${MASTERCARD_API_URL:-}"
-PAYMENTHUB_NAMESPACE="${PH_NAMESPACE:-paymenthub}"
+# Note: Default values are now set after config loading to ensure
+# config file values take precedence. Defaults applied in check_prerequisites().
 
 # Function: Print banner
 print_banner() {
@@ -54,6 +49,15 @@ print_banner() {
 # Function: Check prerequisites
 check_prerequisites() {
     log_info "Checking prerequisites..."
+
+    # Apply defaults if not set by config (must happen after config loading)
+    MASTERCARD_NAMESPACE="${MASTERCARD_NAMESPACE:-mastercard-demo}"
+    MASTERCARD_ENABLED="${MASTERCARD_ENABLED:-true}"
+    MASTERCARD_CBS_HOME="${MASTERCARD_CBS_HOME:-$HOME/ph-ee-connector-mccbs}"
+    MASTERCARD_USE_MOCK="${MASTERCARD_USE_MOCK:-true}"
+    MASTERCARD_API_URL="${MASTERCARD_API_URL:-}"
+    PAYMENTHUB_NAMESPACE="${PH_NAMESPACE:-paymenthub}"
+    MASTERCARD_SIMULATOR_HOME="${MASTERCARD_SIMULATOR_HOME:-$HOME/mastercard-cbs-simulator}"
 
     # Check kubectl
     if ! command -v kubectl &> /dev/null; then
@@ -120,12 +124,12 @@ build_images() {
 create_namespace() {
     log_info "Creating namespace: $MASTERCARD_NAMESPACE"
 
-    run_as_user "kubectl create namespace \"\$MASTERCARD_NAMESPACE\" --dry-run=client -o yaml" | run_as_user "kubectl apply -f -" || {
+    run_as_user "kubectl create namespace $MASTERCARD_NAMESPACE --dry-run=client -o yaml" | run_as_user "kubectl apply -f -" || {
         log_warn "Namespace may already exist"
     }
 
     # Label namespace
-    run_as_user "kubectl label namespace \"\$MASTERCARD_NAMESPACE\" app.kubernetes.io/part-of=mifos-gazelle app.kubernetes.io/component=mastercard-cbs --overwrite"
+    run_as_user "kubectl label namespace $MASTERCARD_NAMESPACE app.kubernetes.io/part-of=mifos-gazelle app.kubernetes.io/component=mastercard-cbs --overwrite"
 
     log_success "Namespace ready: $MASTERCARD_NAMESPACE"
 }
@@ -135,8 +139,8 @@ create_secrets() {
     log_info "Creating Kubernetes secrets..."
 
     # Create Mastercard credentials secret if not exists
-    if ! run_as_user "kubectl get secret mastercard-cbs-credentials -n \"\$MASTERCARD_NAMESPACE\"" &> /dev/null; then
-        run_as_user "kubectl create secret generic mastercard-cbs-credentials -n \"\$MASTERCARD_NAMESPACE\" --from-literal=client_id=\"\${MASTERCARD_CLIENT_ID:-demo}\" --from-literal=client_secret=\"\${MASTERCARD_CLIENT_SECRET:-demo}\" --from-literal=partner_id=\"\${MASTERCARD_PARTNER_ID:-MIFOS_GOVSTACK}\""
+    if ! run_as_user "kubectl get secret mastercard-cbs-credentials -n $MASTERCARD_NAMESPACE" &> /dev/null; then
+        run_as_user "kubectl create secret generic mastercard-cbs-credentials -n $MASTERCARD_NAMESPACE --from-literal=client_id=${MASTERCARD_CLIENT_ID:-demo} --from-literal=client_secret=${MASTERCARD_CLIENT_SECRET:-demo} --from-literal=partner_id=${MASTERCARD_PARTNER_ID:-MIFOS_GOVSTACK}"
 
         log_success "Created mastercard-cbs-credentials secret"
     else
@@ -144,9 +148,9 @@ create_secrets() {
     fi
 
     # Ensure mysql secret is accessible (copy from paymenthub if needed)
-    if run_as_user "kubectl get secret mysql-secret -n \"\$PAYMENTHUB_NAMESPACE\"" &> /dev/null; then
-        if ! run_as_user "kubectl get secret mysql-secret -n \"\$MASTERCARD_NAMESPACE\"" &> /dev/null; then
-            run_as_user "kubectl get secret mysql-secret -n \"\$PAYMENTHUB_NAMESPACE\" -o yaml" | sed "s/namespace: $PAYMENTHUB_NAMESPACE/namespace: $MASTERCARD_NAMESPACE/" | run_as_user "kubectl apply -f -"
+    if run_as_user "kubectl get secret mysql-secret -n $PAYMENTHUB_NAMESPACE" &> /dev/null; then
+        if ! run_as_user "kubectl get secret mysql-secret -n $MASTERCARD_NAMESPACE" &> /dev/null; then
+            run_as_user "kubectl get secret mysql-secret -n $PAYMENTHUB_NAMESPACE -o yaml" | sed "s/namespace: $PAYMENTHUB_NAMESPACE/namespace: $MASTERCARD_NAMESPACE/" | run_as_user "kubectl apply -f -"
             log_success "Copied mysql-secret to $MASTERCARD_NAMESPACE"
         fi
     else
@@ -198,8 +202,29 @@ deploy_connector() {
     jarPath: \"/app/build/libs/ph-ee-connector-mastercard-cbs-1.0.0-SNAPSHOT.jar\""
     fi
 
-    # Create Custom Resource
-    cat <<EOF | run_as_user "kubectl apply -f -"
+    # Determine simulator image settings based on localdev mode
+    local sim_image_repo="mastercard-cbs-simulator"
+    local sim_image_tag="1.0.0"
+    local sim_localdev_section=""
+
+    if [ "${MASTERCARD_SIMULATOR_LOCALDEV_ENABLED:-false}" == "true" ]; then
+        log_info "Simulator local development mode enabled"
+        sim_image_repo="eclipse-temurin"
+        sim_image_tag="17"
+        sim_localdev_section="    localdev:
+      enabled: true
+      hostPath: \"${MASTERCARD_SIMULATOR_HOME}\"
+      jarPath: \"/app/build/libs/mastercard-cbs-simulator-1.0.0-SNAPSHOT.jar\""
+    fi
+
+    # Debug: Show what localdev sections were generated
+    if [ -n "$DEBUG" ]; then
+        log_info "DEBUG: localdev_section = '${localdev_section}'"
+        log_info "DEBUG: sim_localdev_section = '${sim_localdev_section}'"
+    fi
+
+    # Generate CR YAML
+    local cr_yaml=$(cat <<EOF
 apiVersion: paymenthub.mifos.io/v1alpha1
 kind: MastercardCBSConnector
 metadata:
@@ -218,7 +243,7 @@ spec:
     clientSecretName: "mastercard-cbs-credentials"
   paymenthub:
     namespace: "${PAYMENTHUB_NAMESPACE}"
-    zeebeGateway: "zeebe-gateway.${PAYMENTHUB_NAMESPACE}.svc.cluster.local:26500"
+    zeebeGateway: "phee-zeebe-gateway.${PAYMENTHUB_NAMESPACE}.svc.cluster.local:26500"
     operationsDb:
       host: "operationsmysql.${PAYMENTHUB_NAMESPACE}.svc.cluster.local"
       port: 3306
@@ -227,8 +252,9 @@ spec:
   simulator:
     enabled: ${MASTERCARD_USE_MOCK}
     image:
-      repository: mastercard-cbs-simulator
-      tag: "1.0.0"
+      repository: ${sim_image_repo}
+      tag: "${sim_image_tag}"
+${sim_localdev_section}
   dataLoading:
     autoLoad: true
     demoPayeeCount: 10
@@ -243,8 +269,28 @@ ${localdev_section}
       cpu: "250m"
       memory: "256Mi"
 EOF
+)
 
-    log_success "Connector CR created"
+    # Save to debug file
+    local debug_cr_file="/tmp/mastercard-cr-debug-$(date +%s).yaml"
+    echo "$cr_yaml" > "$debug_cr_file"
+    log_info "DEBUG: CR YAML saved to $debug_cr_file"
+
+    # Apply CR and capture output
+    local apply_output
+    apply_output=$(echo "$cr_yaml" | run_as_user "kubectl apply -f - 2>&1")
+    local apply_exit_code=$?
+
+    log_info "DEBUG: kubectl apply exit code: $apply_exit_code"
+    log_info "DEBUG: kubectl apply output: $apply_output"
+
+    if [ $apply_exit_code -eq 0 ]; then
+        log_success "Connector CR created successfully"
+    else
+        log_error "Failed to create Connector CR"
+        log_error "Output: $apply_output"
+        return 1
+    fi
 }
 
 # Function: Load database schema
@@ -384,8 +430,8 @@ wait_for_deployment() {
     # Wait for connector
     log_info "Waiting for CBS connector..."
     while [ $elapsed -lt $timeout ]; do
-        if run_as_user "kubectl get deployment ph-ee-connector-mastercard-cbs -n \"\$MASTERCARD_NAMESPACE\"" &> /dev/null; then
-            if run_as_user "kubectl wait --for=condition=available --timeout=30s deployment/ph-ee-connector-mastercard-cbs -n \"\$MASTERCARD_NAMESPACE\"" &> /dev/null; then
+        if run_as_user "kubectl get deployment ph-ee-connector-mastercard-cbs -n \"$MASTERCARD_NAMESPACE\"" &> /dev/null; then
+            if run_as_user "kubectl wait --for=condition=available --timeout=30s deployment/ph-ee-connector-mastercard-cbs -n \"$MASTERCARD_NAMESPACE\"" &> /dev/null; then
                 log_success "CBS connector is ready"
                 break
             fi
@@ -411,20 +457,20 @@ verify_deployment() {
 
     echo ""
     echo "Checking Custom Resource:"
-    run_as_user "kubectl get mastercardcbsconnector -n \"\$MASTERCARD_NAMESPACE\"" || log_warn "CR not found"
+    run_as_user "kubectl get mastercardcbsconnector -n $MASTERCARD_NAMESPACE" || log_warn "CR not found"
 
     echo ""
     echo "Checking Pods:"
-    run_as_user "kubectl get pods -n \"\$MASTERCARD_NAMESPACE\""
+    run_as_user "kubectl get pods -n $MASTERCARD_NAMESPACE"
 
     echo ""
     echo "Checking Services:"
-    run_as_user "kubectl get svc -n \"\$MASTERCARD_NAMESPACE\""
+    run_as_user "kubectl get svc -n $MASTERCARD_NAMESPACE"
 
     echo ""
     log_info "Checking connector logs..."
-    if run_as_user "kubectl get pod -l app=ph-ee-connector-mastercard-cbs -n \"\$MASTERCARD_NAMESPACE\"" &> /dev/null; then
-        run_as_user "kubectl logs -l app=ph-ee-connector-mastercard-cbs -n \"\$MASTERCARD_NAMESPACE\" --tail=10" | grep -i "Registered worker" || {
+    if run_as_user "kubectl get pod -l app=ph-ee-connector-mastercard-cbs -n $MASTERCARD_NAMESPACE" &> /dev/null; then
+        run_as_user "kubectl logs -l app=ph-ee-connector-mastercard-cbs -n $MASTERCARD_NAMESPACE --tail=10" | grep -i "Registered worker" || {
             log_warn "Workers may not be registered yet"
         }
     fi
@@ -472,20 +518,23 @@ print_summary() {
 cleanup() {
     log_info "Cleaning up Mastercard CBS deployment..."
 
+    # Initialize variables with defaults (in case this is called directly)
+    MASTERCARD_NAMESPACE="${MASTERCARD_NAMESPACE:-mastercard-demo}"
+    MASTERCARD_CBS_HOME="${MASTERCARD_CBS_HOME:-$HOME/ph-ee-connector-mccbs}"
+
     # Delete CR (operator will cleanup resources)
-    run_as_user "kubectl delete mastercardcbsconnector mastercard-cbs -n \"\$MASTERCARD_NAMESPACE\" --ignore-not-found=true"
+    run_as_user "kubectl delete mastercardcbsconnector mastercard-cbs -n \"$MASTERCARD_NAMESPACE\" --ignore-not-found=true"
 
     # Wait for cleanup
     sleep 10
 
     # Undeploy operator
     if [ -f "$MASTERCARD_CBS_HOME/operator/deploy-operator.sh" ]; then
-        cd "$MASTERCARD_CBS_HOME/operator"
-        ./deploy-operator.sh undeploy
+        run_as_user "cd \"$MASTERCARD_CBS_HOME/operator\" && bash deploy-operator.sh undeploy"
     fi
 
     # Delete namespace
-    run_as_user "kubectl delete namespace \"\$MASTERCARD_NAMESPACE\" --ignore-not-found=true"
+    run_as_user "kubectl delete namespace \"$MASTERCARD_NAMESPACE\" --ignore-not-found=true"
 
     log_success "Cleanup complete"
 }
@@ -521,8 +570,8 @@ main() {
             verify_deployment
             ;;
         status)
-            run_as_user "kubectl get mastercardcbsconnector -n \"\$MASTERCARD_NAMESPACE\""
-            run_as_user "kubectl get pods -n \"\$MASTERCARD_NAMESPACE\""
+            run_as_user "kubectl get mastercardcbsconnector -n $MASTERCARD_NAMESPACE"
+            run_as_user "kubectl get pods -n $MASTERCARD_NAMESPACE"
             ;;
         *)
             echo "Usage: $0 {deploy|undeploy|verify|status}"

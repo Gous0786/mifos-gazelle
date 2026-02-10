@@ -11,6 +11,7 @@ import uuid
 from pathlib import Path
 import argparse
 import urllib3
+import subprocess
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -35,6 +36,100 @@ def get_gazelle_domain(cfg):
     except (configparser.NoSectionError, configparser.NoOptionError) as e:
         print(f"Config error: {e}", file=sys.stderr)
         sys.exit(1)
+
+# ----------------------------------------------------------------------
+# Tenant Validation
+# ----------------------------------------------------------------------
+def get_valid_tenants(namespace='paymenthub', pod='operationsmysql-0'):
+    """
+    Query the operationsmysql pod to get list of valid tenant names from
+    tenant_server_connections table.
+
+    Returns:
+        list: List of valid tenant names (schema_name values)
+        None: If query fails (e.g., kubectl not available, pod not found)
+    """
+    try:
+        # First get the mysql root password from secret
+        password_cmd = [
+            'kubectl', 'get', 'secret', '-n', namespace, 'operationsmysql',
+            '-o', "jsonpath={.data.mysql-root-password}"
+        ]
+        password_result = subprocess.run(
+            password_cmd,
+            capture_output=True,
+            text=False,
+            timeout=10
+        )
+
+        if password_result.returncode != 0:
+            print(f"Warning: Could not retrieve mysql password from secret", file=sys.stderr)
+            return None
+
+        # Decode base64 password
+        import base64
+        password = base64.b64decode(password_result.stdout).decode('utf-8').strip()
+
+        # Query tenants database
+        query_cmd = [
+            'kubectl', 'exec', '-n', namespace, pod, '--',
+            'mysql', '-uroot', f'-p{password}', 'tenants',
+            '-e', 'SELECT schema_name FROM tenant_server_connections',
+            '--batch', '--skip-column-names'
+        ]
+
+        result = subprocess.run(
+            query_cmd,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if result.returncode != 0:
+            print(f"Warning: Could not query tenants database", file=sys.stderr)
+            return None
+
+        # Parse output - each line is a tenant name
+        tenants = [line.strip() for line in result.stdout.split('\n') if line.strip() and not line.startswith('mysql:')]
+        return tenants
+
+    except subprocess.TimeoutExpired:
+        print("Warning: Tenant validation query timed out", file=sys.stderr)
+        return None
+    except FileNotFoundError:
+        print("Warning: kubectl not found - skipping tenant validation", file=sys.stderr)
+        return None
+    except Exception as e:
+        print(f"Warning: Tenant validation failed: {e}", file=sys.stderr)
+        return None
+
+def validate_tenant(tenant, namespace='paymenthub'):
+    """
+    Validate that the specified tenant exists in the database.
+
+    Args:
+        tenant: Tenant name to validate
+        namespace: Kubernetes namespace (default: paymenthub)
+
+    Returns:
+        bool: True if tenant is valid, False otherwise
+    """
+    valid_tenants = get_valid_tenants(namespace=namespace)
+
+    if valid_tenants is None:
+        # Could not query database - warn but allow to proceed
+        print(f"⚠️  Warning: Could not validate tenant '{tenant}' - proceeding anyway", file=sys.stderr)
+        return True
+
+    if tenant not in valid_tenants:
+        print(f"\n❌ ERROR: Tenant '{tenant}' does not exist!", file=sys.stderr)
+        print(f"\nValid tenants are: {', '.join(valid_tenants)}", file=sys.stderr)
+        print(f"\nTenants are configured in the tenant_server_connections table", file=sys.stderr)
+        print(f"in the 'tenants' database on the operationsmysql pod.", file=sys.stderr)
+        return False
+
+    print(f"✓ Tenant '{tenant}' validated", file=sys.stderr)
+    return True
 
 # ----------------------------------------------------------------------
 # Signature Generation
@@ -197,6 +292,9 @@ Examples:
     --registering-institution greenbank --program ChildBenefit
 
 Notes:
+  - Tenant names are validated against tenant_server_connections table
+  - Valid tenants can be queried from: kubectl exec -n paymenthub operationsmysql-0 -- \\
+    mysql -uroot -p<password> tenants -e "SELECT schema_name FROM tenant_server_connections"
   - Use generate-example-csv-files.py to create CSV files
   - GovStack mode (--govstack) triggers different BPMN workflow:
     * Sends X-Registering-Institution-ID header
@@ -216,7 +314,7 @@ Notes:
     parser.add_argument('--config', '-c', type=Path, default=default_config,
                        help=f'Path to config.ini (default: {default_config})')
     parser.add_argument('--tenant', '-t', type=str, default='greenbank',
-                       help='Tenant ID (default: greenbank)')
+                       help='Tenant ID (default: greenbank) - will be validated against tenant_server_connections table')
     parser.add_argument('--govstack', '-g', action='store_true',
                        help='Enable GovStack mode (sends X-Registering-Institution-ID header)')
     parser.add_argument('--registering-institution', '-i', type=str, default='greenbank',
@@ -241,6 +339,10 @@ Notes:
     print(f"PAYMENT HUB BATCH TOOL - {domain}", file=sys.stderr)
     print("="*80, file=sys.stderr)
     print(f"Using CSV: {args.csv_file}", file=sys.stderr)
+
+    # Validate tenant exists
+    if not validate_tenant(args.tenant):
+        sys.exit(1)
 
     # Generate correlation ID
     correlation_id = str(uuid.uuid4())
