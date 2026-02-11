@@ -37,6 +37,23 @@ log_error() {
 # Note: Default values are now set after config loading to ensure
 # config file values take precedence. Defaults applied in check_prerequisites().
 
+# Expand ~ to the actual user's home directory (handles sudo)
+expand_tilde() {
+    local path="$1"
+    if [[ "$path" == "~"* ]]; then
+        # When running under sudo, use SUDO_USER's home, otherwise use HOME
+        local user_home
+        if [ -n "$SUDO_USER" ]; then
+            user_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+        else
+            user_home="$HOME"
+        fi
+        # Replace leading ~ with the home directory
+        path="${user_home}${path:1}"
+    fi
+    echo "$path"
+}
+
 # Function: Print banner
 print_banner() {
     echo ""
@@ -164,8 +181,21 @@ deploy_operator() {
 
     cd "$MASTERCARD_CBS_HOME/operator"
 
+    # Determine config file to use and expand ~ to actual path
+    local config_file=""
+    if [ -n "$CONFIG_FILE_PATH" ]; then
+        config_file=$(expand_tilde "$CONFIG_FILE_PATH")
+        log_info "Using config file: $config_file"
+    elif [ -n "$RUN_DIR" ] && [ -f "$RUN_DIR/config/config.ini" ]; then
+        config_file="$RUN_DIR/config/config.ini"
+        log_info "Using default config file: $config_file"
+    else
+        config_file=$(expand_tilde "~/mifos-gazelle/config/config.ini")
+        log_info "Using fallback config file: $config_file"
+    fi
+
     # Deploy operator (run as user to access kubeconfig)
-    run_as_user "bash \"$MASTERCARD_CBS_HOME/operator/deploy-operator.sh\" deploy" || {
+    run_as_user "bash '$MASTERCARD_CBS_HOME/operator/deploy-operator.sh' -c '$config_file' deploy" || {
         log_error "Failed to deploy operator"
         exit 1
     }
@@ -271,23 +301,25 @@ ${localdev_section}
 EOF
 )
 
-    # Save to debug file
-    local debug_cr_file="/tmp/mastercard-cr-debug-$(date +%s).yaml"
-    echo "$cr_yaml" > "$debug_cr_file"
-    log_info "DEBUG: CR YAML saved to $debug_cr_file"
+    # Save to file (also serves as debug file)
+    # Note: Must write to file because run_as_user uses 'su -c' which doesn't pass stdin
+    local cr_file="/tmp/mastercard-cbs-cr.yaml"
+    echo "$cr_yaml" > "$cr_file"
+    chmod 644 "$cr_file"
+    log_info "CR YAML saved to $cr_file"
 
-    # Apply CR and capture output
+    # Apply CR from file
     local apply_output
-    apply_output=$(echo "$cr_yaml" | run_as_user "kubectl apply -f - 2>&1")
+    apply_output=$(run_as_user "kubectl apply -f '$cr_file' 2>&1")
     local apply_exit_code=$?
 
-    log_info "DEBUG: kubectl apply exit code: $apply_exit_code"
-    log_info "DEBUG: kubectl apply output: $apply_output"
+    log_info "kubectl apply exit code: $apply_exit_code"
+    log_info "kubectl apply output: $apply_output"
 
     if [ $apply_exit_code -eq 0 ]; then
-        log_success "Connector CR created successfully"
+        log_success "Connector CR applied successfully"
     else
-        log_error "Failed to create Connector CR"
+        log_error "Failed to apply Connector CR"
         log_error "Output: $apply_output"
         return 1
     fi
