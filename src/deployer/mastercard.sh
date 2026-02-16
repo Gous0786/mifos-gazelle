@@ -179,7 +179,14 @@ create_secrets() {
 deploy_operator() {
     log_info "Deploying Mastercard CBS operator..."
 
-    cd "$MASTERCARD_CBS_HOME/operator"
+    local operator_dir="$RUN_DIR/src/operators/mastercard"
+
+    if [ ! -d "$operator_dir" ]; then
+        log_error "Operator directory not found: $operator_dir"
+        exit 1
+    fi
+
+    cd "$operator_dir"
 
     # Determine config file to use and expand ~ to actual path
     local config_file=""
@@ -195,7 +202,7 @@ deploy_operator() {
     fi
 
     # Deploy operator (run as user to access kubeconfig)
-    run_as_user "bash '$MASTERCARD_CBS_HOME/operator/deploy-operator.sh' -c '$config_file' deploy" || {
+    run_as_user "bash '$operator_dir/deploy-operator.sh' -c '$config_file' deploy" || {
         log_error "Failed to deploy operator"
         exit 1
     }
@@ -353,15 +360,37 @@ load_database_schema() {
 load_supplementary_data() {
     log_info "Loading supplementary data..."
 
-    # This will be handled by the operator's data loading job
-    # But we can trigger it manually if needed
-    log_info "Data loading will be handled by operator"
+    local data_loader="$RUN_DIR/src/utils/mastercard/load-mastercard-supplementary-data.sh"
 
-    # Optionally run locally
-    if [ -f "$MASTERCARD_CBS_HOME/src/utils/data-loading/load-mastercard-supplementary-data.py" ]; then
-        log_info "You can also load data manually:"
-        log_info "  cd $MASTERCARD_CBS_HOME/src/utils/data-loading"
-        log_info "  ./load-mastercard-supplementary-data.py -c ~/tomconfig.ini"
+    # Determine config file path
+    local config_file=""
+    if [ -n "$CONFIG_FILE_PATH" ]; then
+        config_file=$(expand_tilde "$CONFIG_FILE_PATH")
+    elif [ -n "$RUN_DIR" ] && [ -f "$RUN_DIR/config/config.ini" ]; then
+        config_file="$RUN_DIR/config/config.ini"
+    else
+        config_file=$(expand_tilde "~/mifos-gazelle/config/config.ini")
+    fi
+
+    if [ ! -f "$data_loader" ]; then
+        log_warn "Data loader script not found at: $data_loader"
+        log_info "Data loading will be handled by operator"
+        return 0
+    fi
+
+    if [ ! -f "$config_file" ]; then
+        log_warn "Config file not found: $config_file"
+        log_info "Skipping supplementary data loading"
+        return 0
+    fi
+
+    log_info "Running data loader script..."
+    if run_as_user "bash \"$data_loader\" -c \"$config_file\" --count 10" 2>&1 | tee /tmp/mastercard-data-load.log; then
+        log_success "Supplementary data loaded successfully"
+    else
+        log_warn "Failed to load supplementary data, see /tmp/mastercard-data-load.log for details"
+        log_info "You can load data manually:"
+        log_info "  $RUN_DIR/src/utils/mastercard/load-mastercard-supplementary-data.sh -c $config_file"
     fi
 }
 
@@ -526,23 +555,25 @@ print_summary() {
     echo ""
     echo "Namespace: $MASTERCARD_NAMESPACE"
     echo ""
+    echo "Utilities:"
+    echo "  Data Loading:      $RUN_DIR/src/utils/mastercard/load-mastercard-supplementary-data.sh"
+    echo "  Batch Verification: $RUN_DIR/src/utils/mastercard/verify-mastercard-batch.sh -k"
+    echo ""
     echo "Next steps:"
-    echo "  1. Load supplementary data:"
-    echo "     cd $MASTERCARD_CBS_HOME/src/utils/data-loading"
-    echo "     ./load-mastercard-supplementary-data.py -c ~/tomconfig.ini"
+    echo "  1. Verify batch payments:"
+    echo "     $RUN_DIR/src/utils/mastercard/verify-mastercard-batch.sh -k"
     echo ""
-    echo "  2. Generate test batch:"
+    echo "  2. Generate and submit test batch:"
+    echo "     cd $RUN_DIR/src/utils/data-loading"
     echo "     ./generate-mastercard-batch.py -c ~/tomconfig.ini --count 10"
-    echo ""
-    echo "  3. Submit batch:"
     echo "     ./submit-batch.py -c ~/tomconfig.ini -f bulk-mastercard-cbs.csv \\"
     echo "       --tenant greenbank --payment-mode MASTERCARD_CBS"
     echo ""
-    echo "  4. Monitor:"
-    echo "     kubectl logs -n $MASTERCARD_NAMESPACE -l app=ph-ee-connector-mastercard-cbs -f"
+    echo "  3. Monitor logs:"
+    echo "     kubectl logs -n $MASTERCARD_NAMESPACE -l app=ph-ee-connector-mastercard-cbs -f | grep 'MASTERCARD CBS'"
     echo ""
-    echo "  5. Check CR status:"
-    echo "     kubectl get mastercardcbsconnector -n $MASTERCARD_NAMESPACE"
+    echo "  4. Check CR status:"
+    echo "     kubectl get mastercardcbsconnector -n $MASTERCARD_NAMESPACE -o yaml"
     echo ""
 }
 
@@ -552,7 +583,7 @@ cleanup() {
 
     # Initialize variables with defaults (in case this is called directly)
     MASTERCARD_NAMESPACE="${MASTERCARD_NAMESPACE:-mastercard-demo}"
-    MASTERCARD_CBS_HOME="${MASTERCARD_CBS_HOME:-$HOME/ph-ee-connector-mccbs}"
+    local operator_dir="${RUN_DIR:-$HOME/mifos-gazelle}/src/operators/mastercard"
 
     # Delete CR (operator will cleanup resources)
     run_as_user "kubectl delete mastercardcbsconnector mastercard-cbs -n \"$MASTERCARD_NAMESPACE\" --ignore-not-found=true"
@@ -561,8 +592,8 @@ cleanup() {
     sleep 10
 
     # Undeploy operator
-    if [ -f "$MASTERCARD_CBS_HOME/operator/deploy-operator.sh" ]; then
-        run_as_user "cd \"$MASTERCARD_CBS_HOME/operator\" && bash deploy-operator.sh undeploy"
+    if [ -f "$operator_dir/deploy-operator.sh" ]; then
+        run_as_user "cd \"$operator_dir\" && bash deploy-operator.sh undeploy"
     fi
 
     # Delete namespace
@@ -583,6 +614,7 @@ deploy_mastercard() {
     deploy_connector
     wait_for_deployment
     deploy_bpmn_workflow
+    load_supplementary_data
     configure_payment_mode
     verify_deployment
     print_summary
