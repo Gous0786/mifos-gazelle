@@ -120,10 +120,21 @@ if [ -z "$domain" ]; then
     exit 1
 fi
 
-HOST="https://zeebeops.$domain/zeebe/upload"
-echo "================================================================"
-echo "Zeebe BPMN Deployment Tool"
-echo "================================================================"
+# Check if running inside Kubernetes pod (check for service account token)
+if [ -f /var/run/secrets/kubernetes.io/serviceaccount/token ]; then
+    # Running inside a pod, use internal service
+    HOST="http://ph-ee-zeebe-ops.paymenthub.svc.cluster.local/zeebe/upload"
+    echo "================================================================"
+    echo "Zeebe BPMN Deployment Tool (Kubernetes Internal)"
+    echo "================================================================"
+else
+    # Running externally, use ingress
+    HOST="https://zeebeops.$domain/zeebe/upload"
+    echo "================================================================"
+    echo "Zeebe BPMN Deployment Tool"
+    echo "================================================================"
+fi
+
 echo "Config file: $config_ini"
 echo "Domain: $domain"
 echo "Endpoint: $HOST"

@@ -386,6 +386,9 @@ function deployApps() {
         deployPH
         ;;
       "mastercard-demo")
+        if [[ "$redeploy" == "true" ]]; then
+          deleteApps "mastercard-demo"
+        fi
         deployInfrastructure "false"
         # Ensure PaymentHub is deployed before Mastercard
         if ! run_as_user "kubectl get namespace \"$PH_NAMESPACE\"" &> /dev/null; then

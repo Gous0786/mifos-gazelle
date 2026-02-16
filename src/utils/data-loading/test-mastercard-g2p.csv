@@ -1,0 +1,2 @@
+id,request_id,payment_mode,payer_identifier_type,payer_identifier,payee_identifier_type,payee_identifier,amount,currency,note
+0,test-g2p-001,MASTERCARD_CBS,MSISDN,0413509790,MSISDN,0495822412,10,USD,Test G2P payment
