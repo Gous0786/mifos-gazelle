@@ -70,11 +70,13 @@ check_prerequisites() {
     # Apply defaults if not set by config (must happen after config loading)
     MASTERCARD_NAMESPACE="${MASTERCARD_NAMESPACE:-mastercard-demo}"
     MASTERCARD_ENABLED="${MASTERCARD_ENABLED:-true}"
-    MASTERCARD_CBS_HOME="${MASTERCARD_CBS_HOME:-$HOME/ph-ee-connector-mccbs}"
+    MASTERCARD_CBS_HOME="${MASTERCARD_CBS_HOME:-~/ph-ee-connector-mccbs}"
+    MASTERCARD_CBS_HOME=$(expand_tilde "$MASTERCARD_CBS_HOME")
     MASTERCARD_USE_MOCK="${MASTERCARD_USE_MOCK:-true}"
     MASTERCARD_API_URL="${MASTERCARD_API_URL:-}"
     PAYMENTHUB_NAMESPACE="${PH_NAMESPACE:-paymenthub}"
-    MASTERCARD_SIMULATOR_HOME="${MASTERCARD_SIMULATOR_HOME:-$HOME/mastercard-cbs-simulator}"
+    MASTERCARD_SIMULATOR_HOME="${MASTERCARD_SIMULATOR_HOME:-~/mastercard-cbs-simulator}"
+    MASTERCARD_SIMULATOR_HOME=$(expand_tilde "$MASTERCARD_SIMULATOR_HOME")
 
     # Check kubectl
     if ! command -v kubectl &> /dev/null; then
@@ -123,9 +125,9 @@ build_images() {
     fi
 
     # Build simulator image if needed
-    if [ "$MASTERCARD_USE_MOCK" == "true" ] && [ -d "$HOME/mastercard-cbs-simulator" ]; then
+    if [ "$MASTERCARD_USE_MOCK" == "true" ] && [ -d "$MASTERCARD_SIMULATOR_HOME" ]; then
         log_info "Building mock simulator image..."
-        cd "$HOME/mastercard-cbs-simulator"
+        cd "$MASTERCARD_SIMULATOR_HOME"
         if [ -f "pom.xml" ] || [ -f "Dockerfile" ]; then
             docker build -t mastercard-cbs-simulator:1.0.0 . || {
                 log_warn "Failed to build simulator image, will try to use existing"
