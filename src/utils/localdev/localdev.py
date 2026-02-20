@@ -701,10 +701,15 @@ class LocalDevPatcher:
             return False
         
         comp_config = self.config[component]
+
+        if 'directory' not in comp_config:
+            print(f"\n⏭️  Skipping {component} - operator-managed (no Helm chart to restore)")
+            return True
+
         directory = Path(self._expand_vars(comp_config['directory']))
         deployment_file = directory / "templates" / "deployment.yaml"
         backup_file = deployment_file.parent / f"_deployment.yaml.backup"
-        
+
         if not backup_file.exists():
             print(f"❌ No backup found for {component}")
             return False
