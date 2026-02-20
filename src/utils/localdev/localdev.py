@@ -108,9 +108,11 @@ class LocalDevPatcher:
                 continue
                 
             comp_config = self.config[comp]
+            if 'directory' not in comp_config:
+                continue
             directory = Path(self._expand_vars(comp_config['directory']))
             deployment_file = directory / "templates" / "deployment.yaml"
-            
+
             if not deployment_file.exists():
                 continue
             
@@ -766,37 +768,37 @@ def main():
         epilog="""
 Examples:
   # Show status of all components
-  python localdev.py --status
+  ./localdev.py --status
   
   # Complete setup: checkout repos + patch deployments
-  python localdev.py --setup
+  ./localdev.py --setup
   
   # Just checkout component repositories
-  python localdev.py --checkout
+  ./localdev.py --checkout
   
   # Update existing repos (pull latest)
-  python localdev.py --update
+  ./localdev.py --update
   
   # Dry run - see what would be changed
-  python localdev.py --dry-run
+  ./localdev.py --dry-run
   
   # Patch all components (auto-protects from git commits)
-  python localdev.py
+  ./localdev.py
   
   # Setup specific component (checkout + patch)
-  python localdev.py --setup --component bulk-processor
+  ./localdev.py --setup --component bulk-processor
   
   # Checkout specific component
-  python localdev.py --checkout --component bulk-processor
+  ./localdev.py --checkout --component bulk-processor
   
   # Check which files are protected from git commits
-  python localdev.py --check-git-status
+  ./localdev.py --check-git-status
   
   # Restore all from backups (removes git protection)
-  python localdev.py --restore
+  ./localdev.py --restore
   
   # Restore specific component
-  python localdev.py --restore --component bulk-processor
+  ./localdev.py --restore --component bulk-processor
         """
     )
     
