@@ -74,8 +74,8 @@ CONFIG_FILE="${CONFIG_FILE:-$HOME/tomconfig.ini}"
 MYSQL_HOST="operationsmysql.paymenthub.svc.cluster.local"
 MYSQL_PORT="3306"
 MYSQL_USER="root"
-MYSQL_PASS="mysql"
-DATABASE="operations_app"
+MYSQL_PASS="ethieTieCh8ahv"
+DATABASE="greenbank"  # Default to greenbank tenant database
 USE_KUBECTL=false
 
 # Colors for output
@@ -135,42 +135,22 @@ echo ""
 
 # SQL query for batch verification report
 read -r -d '' SQL_QUERY << 'EOF' || true
--- Mastercard CBS Batch Payment Verification Report
+-- Mastercard CBS Payment Verification Report
 
 SELECT '════════════════════════════════════════════════════════════════' AS '';
-SELECT '  MASTERCARD CBS BATCH PAYMENT SUMMARY' AS '';
+SELECT '  MASTERCARD CBS PAYMENT SUMMARY (Last 24 Hours)' AS '';
 SELECT '════════════════════════════════════════════════════════════════' AS '';
 
--- Overall batch statistics
+-- Overall transfer statistics
 SELECT
-    COUNT(DISTINCT t.batch_id) AS 'Total Batches',
     COUNT(t.id) AS 'Total Transfers',
     SUM(CASE WHEN t.status = 'COMPLETED' THEN 1 ELSE 0 END) AS 'Completed',
     SUM(CASE WHEN t.status = 'FAILED' THEN 1 ELSE 0 END) AS 'Failed',
     SUM(CASE WHEN t.status NOT IN ('COMPLETED', 'FAILED') THEN 1 ELSE 0 END) AS 'Pending',
-    CONCAT(ROUND(SUM(CASE WHEN t.status = 'COMPLETED' THEN 1 ELSE 0 END) * 100.0 / COUNT(t.id), 1), '%') AS 'Success Rate'
+    CONCAT(ROUND(SUM(CASE WHEN t.status = 'COMPLETED' THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(t.id), 0), 1), '%') AS 'Success Rate'
 FROM transfers t
-WHERE t.workflow_instance_key IS NOT NULL
-  AND t.started_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR);
-
-SELECT '' AS '';
-SELECT '════════════════════════════════════════════════════════════════' AS '';
-SELECT '  RECENT BATCHES (Last 10)' AS '';
-SELECT '════════════════════════════════════════════════════════════════' AS '';
-
--- Recent batch details
-SELECT
-    b.id AS 'ID',
-    LEFT(b.batch_id, 25) AS 'Batch UUID',
-    b.total AS 'Total',
-    b.successful AS 'Success',
-    b.failed AS 'Failed',
-    b.ongoing AS 'Ongoing',
-    CONCAT(ROUND(b.successful * 100.0 / NULLIF(b.total, 0), 1), '%') AS 'Rate',
-    DATE_FORMAT(b.started_at, '%Y-%m-%d %H:%i:%s') AS 'Started At'
-FROM batch b
-ORDER BY b.id DESC
-LIMIT 10;
+WHERE t.started_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+  OR t.completed_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR);
 
 SELECT '' AS '';
 SELECT '════════════════════════════════════════════════════════════════' AS '';
@@ -181,13 +161,12 @@ SELECT '════════════════════════
 SELECT
     t.id AS 'ID',
     LEFT(t.transaction_id, 20) AS 'Transaction ID',
-    t.payee_identifier AS 'Payee',
-    CONCAT(t.amount, ' ', t.currency) AS 'Amount',
+    t.payee_party_id AS 'Payee',
+    CONCAT(COALESCE(t.amount, 0), ' ', COALESCE(t.currency, 'USD')) AS 'Amount',
     t.status AS 'Status',
     LEFT(COALESCE(t.external_id, 'N/A'), 35) AS 'Mastercard Payment ID',
-    DATE_FORMAT(t.started_at, '%H:%i:%s') AS 'Time'
+    DATE_FORMAT(COALESCE(t.completed_at, t.started_at), '%H:%i:%s') AS 'Time'
 FROM transfers t
-WHERE t.workflow_instance_key IS NOT NULL
 ORDER BY t.id DESC
 LIMIT 15;
 
@@ -200,12 +179,11 @@ SELECT '════════════════════════
 SELECT
     t.status AS 'Status',
     COUNT(*) AS 'Count',
-    CONCAT(ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM transfers WHERE workflow_instance_key IS NOT NULL AND started_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)), 1), '%') AS 'Percentage',
-    MIN(DATE_FORMAT(t.started_at, '%H:%i:%s')) AS 'First',
-    MAX(DATE_FORMAT(t.started_at, '%H:%i:%s')) AS 'Last'
+    CONCAT(ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM transfers WHERE completed_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)), 1), '%') AS 'Percentage',
+    MIN(DATE_FORMAT(COALESCE(t.completed_at, t.started_at), '%H:%i:%s')) AS 'First',
+    MAX(DATE_FORMAT(COALESCE(t.completed_at, t.started_at), '%H:%i:%s')) AS 'Last'
 FROM transfers t
-WHERE t.workflow_instance_key IS NOT NULL
-  AND t.started_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+WHERE (t.started_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) OR t.completed_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR))
 GROUP BY t.status
 ORDER BY COUNT(*) DESC;
 
@@ -218,15 +196,14 @@ SELECT '════════════════════════
 SELECT
     t.id AS 'ID',
     LEFT(t.transaction_id, 20) AS 'Transaction ID',
-    t.payee_identifier AS 'Payee',
-    CONCAT(t.amount, ' ', t.currency) AS 'Amount',
+    t.payee_party_id AS 'Payee',
+    CONCAT(COALESCE(t.amount, 0), ' ', COALESCE(t.currency, 'USD')) AS 'Amount',
     LEFT(COALESCE(t.error_information, 'No error info'), 50) AS 'Error',
     LEFT(COALESCE(t.status_detail, 'N/A'), 40) AS 'Status Detail',
-    DATE_FORMAT(t.started_at, '%H:%i:%s') AS 'Time'
+    DATE_FORMAT(COALESCE(t.completed_at, t.started_at), '%H:%i:%s') AS 'Time'
 FROM transfers t
 WHERE t.status = 'FAILED'
-  AND t.workflow_instance_key IS NOT NULL
-  AND t.started_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+  AND (t.started_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR) OR t.completed_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR))
 ORDER BY t.id DESC
 LIMIT 10;
 

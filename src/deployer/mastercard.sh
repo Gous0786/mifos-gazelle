@@ -296,7 +296,7 @@ ${sim_localdev_section}
     autoLoad: true
     demoPayeeCount: 10
   workflow:
-    autoDeploy: true
+    autoDeploy: false  # Workflow deployed by mastercard.sh, not operator
 ${localdev_section}
   resources:
     limits:
@@ -398,10 +398,12 @@ load_supplementary_data() {
 deploy_bpmn_workflow() {
     log_info "Deploying BPMN workflow..."
 
-    local workflow_file="$MASTERCARD_CBS_HOME/orchestration/bulk_connector_mastercard_cbs-DFSPID.bpmn"
+    local workflow_file="$MASTERCARD_CBS_HOME/orchestration/MastercardFundTransfer-DFSPID.bpmn"
 
     if [ ! -f "$workflow_file" ]; then
         log_warn "BPMN workflow file not found: $workflow_file"
+        log_warn "The operator should have deployed this workflow automatically"
+        log_info "Workflow expected at: $workflow_file"
         return 1
     fi
 
