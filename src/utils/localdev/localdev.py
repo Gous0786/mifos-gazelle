@@ -362,9 +362,14 @@ class LocalDevPatcher:
                 print(f"  ⏭️  Checkout disabled")
             
             # Check deployment patch status
+            if 'directory' not in comp_config:
+                print(f"  ℹ️  Operator-managed (no Helm chart) - configure via CR samples")
+                print()
+                continue
+
             directory = Path(self._expand_vars(comp_config['directory']))
             deployment_file = directory / "templates" / "deployment.yaml"
-            
+
             if deployment_file.exists():
                 try:
                     result = subprocess.run(
@@ -408,6 +413,12 @@ class LocalDevPatcher:
             return False
 
         comp_config = self.config[component]
+
+        # Operator-managed components have no Helm chart to patch
+        if 'directory' not in comp_config:
+            print(f"\n⏭️  Skipping {component} - operator-managed (no Helm chart to patch)")
+            print(f"  ℹ️  Use the CR samples in src/operators/ to configure this component")
+            return True
 
         # Get component configuration
         directory = Path(self._expand_vars(comp_config['directory']))
