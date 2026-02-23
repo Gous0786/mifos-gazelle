@@ -59,7 +59,7 @@ spec:
                     apiUrl:
                       type: string
                       description: "Mastercard CBS API URL"
-                      default: "http://mastercard-simulator.mastercard-demo.svc.cluster.local:8080"
+                      default: "https://sandbox.api.mastercard.com"
                     authUrl:
                       type: string
                       description: "OAuth token endpoint"
@@ -73,11 +73,6 @@ spec:
                       type: string
                       description: "Kubernetes secret name containing client_secret"
                       default: "mastercard-cbs-credentials"
-                    useMock:
-                      type: boolean
-                      description: "Use mock API instead of real sandbox"
-                      default: true
-
                 # PaymentHub Integration
                 paymenthub:
                   type: object
@@ -108,39 +103,6 @@ spec:
                           type: string
                           description: "Secret containing DB credentials"
                           default: "mysql-secret"
-
-                # Mock Simulator Configuration
-                simulator:
-                  type: object
-                  properties:
-                    enabled:
-                      type: boolean
-                      description: "Deploy mock Mastercard API simulator"
-                      default: true
-                    image:
-                      type: object
-                      properties:
-                        repository:
-                          type: string
-                          default: "mastercard-cbs-simulator"
-                        tag:
-                          type: string
-                          default: "1.0.0"
-                    localdev:
-                      type: object
-                      description: "Local development configuration for simulator"
-                      properties:
-                        enabled:
-                          type: boolean
-                          description: "Enable localdev mode for simulator"
-                          default: false
-                        hostPath:
-                          type: string
-                          description: "Host path to mount simulator code from"
-                        jarPath:
-                          type: string
-                          description: "Path to JAR file inside container"
-                          default: "/app/build/libs/mastercard-cbs-simulator-1.0.0-SNAPSHOT.jar"
 
                 # Data Loading Configuration
                 dataLoading:
@@ -233,9 +195,6 @@ spec:
                 connectorReady:
                   type: boolean
                   description: "CBS connector deployment ready"
-                simulatorReady:
-                  type: boolean
-                  description: "Mock simulator deployment ready (if enabled)"
                 workflowDeployed:
                   type: boolean
                   description: "BPMN workflow deployed to Zeebe"

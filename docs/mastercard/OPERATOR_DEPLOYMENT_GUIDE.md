@@ -31,8 +31,7 @@ metadata:
 spec:
   enabled: true
   mastercard:
-    useMock: true
-    apiUrl: "http://mastercard-simulator:8080"
+    apiUrl: "https://sandbox.api.mastercard.com"
   ...
 ```
 
@@ -59,15 +58,13 @@ Service account, roles, and bindings for operator permissions.
 [mastercard-demo]
 enabled=true
 namespace=mastercard-demo
-use_mock=true
-api_url=
-cbs_home=/home/tdaly/ph-ee-connector-mccbs
+...
 ```
 
 2. **Run deployment**:
 ```bash
 cd ~/mifos-gazelle
-sudo ./run.sh --enable-mastercard
+sudo ./run.sh -a mastercard-demo 
 ```
 
 ### Option 2: Deploy Standalone
@@ -113,15 +110,10 @@ namespace=mastercard-demo
 # Mastercard CBS home directory
 cbs_home=/home/tdaly/ph-ee-connector-mccbs
 
-# Use mock API or real sandbox
-use_mock=true
+# Mastercard CBS sandbox API URL
+api_url=https://sandbox.api.mastercard.com
 
-# API URL (empty = auto-detect based on use_mock)
-api_url=
-
-# For real sandbox:
-# use_mock=false
-# api_url=https://sandbox.api.mastercard.com
+# Sandbox credentials
 # client_id=YOUR_CLIENT_ID
 # client_secret=YOUR_CLIENT_SECRET
 # partner_id=YOUR_PARTNER_ID
@@ -158,13 +150,8 @@ spec:
 
   # Mastercard API configuration
   mastercard:
-    useMock: true
-    apiUrl: "http://mastercard-simulator.mastercard-demo.svc.cluster.local:8080"
-    # For sandbox:
-    # useMock: false
-    # apiUrl: "https://sandbox.api.mastercard.com"
-    # partnerId: "YOUR_PARTNER_ID"
-    # clientId: "YOUR_CLIENT_ID"
+    apiUrl: "https://sandbox.api.mastercard.com"
+    partnerId: "YOUR_PARTNER_ID"
     clientSecretName: "mastercard-cbs-credentials"
 
   # PaymentHub integration
@@ -176,13 +163,6 @@ spec:
       port: 3306
       database: "operations"
       secretName: "mysql-secret"
-
-  # Mock simulator
-  simulator:
-    enabled: true
-    image:
-      repository: mastercard-cbs-simulator
-      tag: "1.0.0"
 
   # Data loading
   dataLoading:
@@ -290,7 +270,6 @@ kubectl get mastercardcbsconnector -n mastercard-demo -w
 **Status Fields**:
 - `phase`: Pending, Initializing, Ready, Failed, Disabled
 - `connectorReady`: CBS connector deployment ready
-- `simulatorReady`: Mock simulator ready (if enabled)
 - `workflowDeployed`: BPMN workflow deployed
 - `dataLoaded`: Supplementary data loaded
 
@@ -304,12 +283,6 @@ kubectl logs -n mastercard-demo -l app=mastercard-cbs-operator -f
 
 ```bash
 kubectl logs -n mastercard-demo -l app=ph-ee-connector-mastercard-cbs -f
-```
-
-### Check Simulator Logs
-
-```bash
-kubectl logs -n mastercard-demo -l app=mastercard-cbs-simulator -f
 ```
 
 ---
@@ -394,7 +367,7 @@ zbctl deploy ~/ph-ee-connector-mccbs/orchestration/bulk_connector_mastercard_cbs
   --address zeebe-gateway.paymenthub.svc.cluster.local:26500
 ```
 
-### Switch to Real Sandbox
+### Update Sandbox Credentials
 
 Update CR:
 ```bash
@@ -403,13 +376,8 @@ kubectl patch mastercardcbsconnector mastercard-cbs -n mastercard-demo \
   -p '{
     "spec":{
       "mastercard":{
-        "useMock":false,
         "apiUrl":"https://sandbox.api.mastercard.com",
-        "partnerId":"YOUR_PARTNER_ID",
-        "clientId":"YOUR_CLIENT_ID"
-      },
-      "simulator":{
-        "enabled":false
+        "partnerId":"YOUR_PARTNER_ID"
       }
     }
   }'

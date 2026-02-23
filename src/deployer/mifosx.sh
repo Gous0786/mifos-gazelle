@@ -81,6 +81,78 @@ function DeployMifosXfromYaml() {
 }
 
 #------------------------------------------------------------------------------
+# Function : wait_for_fineract_api_ready
+# Description: Polls two Fineract endpoints per tenant until both confirm the
+#              tenant is fully initialised:
+#                1. /clients       → HTTP 200  (schema migration complete)
+#                2. /paymenttypes  → non-empty array (seed-data migration complete)
+#              Checking only /clients is insufficient: it returns 200 as soon as
+#              the DDL migration finishes, but Fineract's DML seed phase (payment
+#              types, currencies, offices) runs afterwards.  Savings-product and
+#              client creation fail with 4xx until that seed phase completes.
+# Parameters: None (uses GAZELLE_DOMAIN)
+# Returns:    0 if all tenants ready, 1 on timeout
+#------------------------------------------------------------------------------
+function wait_for_fineract_api_ready {
+  local tenants=("greenbank" "bluebank" "redbank")
+  local base_url="https://mifos.${GAZELLE_DOMAIN}/fineract-provider/api/v1"
+  local auth="Basic bWlmb3M6cGFzc3dvcmQ="   # mifos:password
+  local timeout=300
+  local retry_interval=10
+
+  echo -e "${BLUE}    Waiting for Fineract tenant APIs to be fully initialised (schema + seed data)...${RESET}"
+
+  for tenant in "${tenants[@]}"; do
+    local start_time
+    start_time=$(date +%s)
+    local elapsed=0
+    local ready=false
+
+    while [[ $elapsed -lt $timeout ]]; do
+      # Gate 1: schema migration done (/clients returns 200)
+      local clients_code
+      clients_code=$(curl -sk -o /dev/null -w "%{http_code}" \
+        -H "Authorization: ${auth}" \
+        -H "Fineract-Platform-TenantId: ${tenant}" \
+        --max-time 10 \
+        "${base_url}/clients" 2>/dev/null)
+
+      if [[ "$clients_code" == "200" ]]; then
+        # Gate 2: seed-data migration done (/paymenttypes returns non-empty array)
+        local paymenttypes_body
+        paymenttypes_body=$(curl -sk \
+          -H "Authorization: ${auth}" \
+          -H "Fineract-Platform-TenantId: ${tenant}" \
+          --max-time 10 \
+          "${base_url}/paymenttypes" 2>/dev/null)
+
+        # Non-empty JSON array means seeding is complete
+        if [[ "$paymenttypes_body" =~ ^\[ && "$paymenttypes_body" != "[]" ]]; then
+          echo -e "${GREEN}    Fineract tenant '${tenant}' fully ready — schema + seed data (${elapsed}s elapsed)${RESET}"
+          ready=true
+          break
+        else
+          echo -e "${YELLOW}    Tenant '${tenant}' schema ready but seed data still pending, retrying in ${retry_interval}s... (${elapsed}s / ${timeout}s)${RESET}"
+        fi
+      else
+        echo -e "${YELLOW}    Tenant '${tenant}' schema not ready (HTTP ${clients_code:-000}), retrying in ${retry_interval}s... (${elapsed}s / ${timeout}s)${RESET}"
+      fi
+
+      sleep $retry_interval
+      elapsed=$(( $(date +%s) - start_time ))
+    done
+
+    if [[ "$ready" != "true" ]]; then
+      echo -e "${RED}    ERROR: Fineract tenant '${tenant}' not fully initialised after ${timeout}s${RESET}"
+      return 1
+    fi
+  done
+
+  echo -e "${GREEN}    All Fineract tenant APIs are ready${RESET}"
+  return 0
+}
+
+#------------------------------------------------------------------------------
 # Function : generateMifosXandVNextData
 # Description: Generates MifosX clients and accounts & registers associations with vNext Oracle.
 # Parameters: None
@@ -98,9 +170,16 @@ function generateMifosXandVNextData {
     result_mifosx=$?
     
     if [[ $result_vnext -eq 0 ]] && [[ $result_mifosx -eq 0 ]]; then
+      # Pods are ready but Fineract's per-tenant Flyway migrations may still be running.
+      # Poll each tenant's API endpoint until all return HTTP 200 before generating data.
+      if ! wait_for_fineract_api_ready; then
+        echo -e "${RED}    Fineract API not ready — aborting data generation${RESET}"
+        return 1
+      fi
+
       echo -e "${BLUE}    Generating MifosX clients and accounts & registering associations with vNext Oracle ...${RESET}"
-      
-      results=$(run_as_user "$RUN_DIR/src/utils/data-loading/generate-mifos-vnext-data.py --regenerate -c \"$CONFIG_FILE_PATH\" ") #> /dev/null 2>&1
+
+      results=$(run_as_user "$RUN_DIR/src/utils/data-loading/generate-mifos-vnext-data.py -c \"$CONFIG_FILE_PATH\" ") #> /dev/null 2>&1
   
       if [[ "$?" -ne 0 ]]; then
         echo -e "${RED}Error generating vNext clients and accounts ${RESET}"

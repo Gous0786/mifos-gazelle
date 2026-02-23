@@ -18,9 +18,7 @@ spec:
 
   # Mastercard API configuration
   mastercard:
-    # Use mock API for demo
-    useMock: true
-    apiUrl: "http://mastercard-simulator.mastercard-demo.svc.cluster.local:8080"
+    apiUrl: "https://sandbox.api.mastercard.com"
     clientSecretName: "mastercard-cbs-credentials"
 
   # PaymentHub integration
@@ -32,13 +30,6 @@ spec:
       port: 3306
       database: "operations"
       secretName: "mysql-secret"
-
-  # Mock simulator configuration
-  simulator:
-    enabled: true
-    image:
-      repository: mastercard-cbs-simulator
-      tag: "1.0.0"
 
   # Data loading
   dataLoading:

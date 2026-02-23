@@ -98,7 +98,6 @@ echo "✅ End-to-end test complete!"
 echo "======================================================================"
 echo
 echo "To verify manually:"
-echo "  • Simulator logs:  kubectl logs -n mastercard-demo -l app=mastercard-cbs-simulator --tail=50"
 echo "  • Connector logs:  kubectl logs -n mastercard-demo -l app=ph-ee-connector-mastercard-cbs --tail=50"
 echo "  • Zeebe Operate:   http://zeebe-operate.mifos.gazelle.test (search: MastercardFundTransfer)"
 echo ""

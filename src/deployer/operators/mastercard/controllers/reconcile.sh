@@ -51,12 +51,7 @@ reconcile() {
         load_database_data "$cr_name" "$namespace" "$cr_json" "$config_file"
     fi
 
-    # Phase 3: Deploy mock simulator if enabled
-    if [ "$(echo "$cr_json" | jq -r '.spec.simulator.enabled // true')" == "true" ]; then
-        deploy_simulator "$cr_name" "$namespace" "$cr_json" "$config_file"
-    fi
-
-    # Phase 4: Deploy connector
+    # Phase 3: Deploy connector
     deploy_connector "$cr_name" "$namespace" "$cr_json" "$config_file"
 
     # Phase 5: Deploy BPMN workflow
@@ -143,125 +138,6 @@ load_database_data() {
     return 0
 }
 
-# Deploy mock simulator
-deploy_simulator() {
-    local cr_name="$1"
-    local namespace="$2"
-    local cr_json="$3"
-    local config_file="$4"
-
-    log_info "Deploying mock Mastercard API simulator..."
-
-    # Check if localdev mode is enabled for simulator
-    local sim_localdev_enabled
-    sim_localdev_enabled=$(echo "$cr_json" | jq -r '.spec.simulator.localdev.enabled // false')
-
-    local image_repo
-    local image_tag
-    local sim_command_section=""
-    local sim_volumes_section=""
-    local sim_volumemounts_section=""
-
-    if [ "$sim_localdev_enabled" == "true" ]; then
-        log_info "Simulator local development mode ENABLED"
-
-        # Use JDK image for local dev
-        image_repo="eclipse-temurin"
-        image_tag="17"
-
-        local sim_host_path
-        sim_host_path=$(echo "$cr_json" | jq -r '.spec.simulator.localdev.hostPath // env.HOME + "/mastercard-cbs-simulator"')
-
-        local sim_jar_path
-        sim_jar_path=$(echo "$cr_json" | jq -r '.spec.simulator.localdev.jarPath // "/app/build/libs/mastercard-cbs-simulator-1.0.0-SNAPSHOT.jar"')
-
-        log_info "  Simulator host path: $sim_host_path"
-        log_info "  Simulator JAR path: $sim_jar_path"
-        log_info "  Simulator image: $image_repo:$image_tag"
-
-        # Add command override to run JAR
-        sim_command_section="        command: [\"java\"]
-        args:
-          - \"-jar\"
-          - \"${sim_jar_path}\"
-          - \"--spring.profiles.active=default\""
-
-        # Add volume mount
-        sim_volumemounts_section="        volumeMounts:
-        - name: simulator-code
-          mountPath: /app"
-
-        # Add volume definition
-        sim_volumes_section="      volumes:
-      - name: simulator-code
-        hostPath:
-          path: ${sim_host_path}
-          type: Directory"
-    else
-        # Use built simulator image
-        image_repo=$(echo "$cr_json" | jq -r '.spec.simulator.image.repository // "mastercard-cbs-simulator"')
-        image_tag=$(echo "$cr_json" | jq -r '.spec.simulator.image.tag // "1.0.0"')
-    fi
-
-    kubectl apply -n "$namespace" -f - <<EOF
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: mastercard-cbs-simulator
-  namespace: ${namespace}
-  labels:
-    app.kubernetes.io/name: mastercard-cbs-simulator
-    app.kubernetes.io/instance: ${cr_name}
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: mastercard-cbs-simulator
-  template:
-    metadata:
-      labels:
-        app: mastercard-cbs-simulator
-    spec:
-      containers:
-      - name: simulator
-        image: ${image_repo}:${image_tag}
-${sim_command_section}
-        ports:
-        - containerPort: 8080
-          name: http
-        env:
-        - name: SERVER_PORT
-          value: "8080"
-        - name: OAUTH_ISSUER
-          value: "mastercard-simulator"
-${sim_volumemounts_section}
-        resources:
-          limits:
-            cpu: "200m"
-            memory: "256Mi"
-          requests:
-            cpu: "100m"
-            memory: "128Mi"
-${sim_volumes_section}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: mastercard-simulator
-  namespace: ${namespace}
-spec:
-  selector:
-    app: mastercard-cbs-simulator
-  ports:
-  - port: 8080
-    targetPort: 8080
-    name: http
-  type: ClusterIP
-EOF
-
-    log_info "Simulator deployed successfully"
-}
-
 # Deploy connector
 deploy_connector() {
     local cr_name="$1"
@@ -328,7 +204,7 @@ deploy_connector() {
     local replicas
     replicas=$(echo "$cr_json" | jq -r '.spec.replicas // 1')
     local mastercard_api_url
-    mastercard_api_url=$(echo "$cr_json" | jq -r '.spec.mastercard.apiUrl // "http://mastercard-simulator:8080"')
+    mastercard_api_url=$(echo "$cr_json" | jq -r '.spec.mastercard.apiUrl // "https://sandbox.api.mastercard.com"')
     local zeebe_gateway
     zeebe_gateway=$(echo "$cr_json" | jq -r '.spec.paymenthub.zeebeGateway // "zeebe-gateway.paymenthub.svc.cluster.local:26500"')
     local db_host
@@ -489,9 +365,7 @@ cleanup_resources() {
 
     # Delete Kubernetes resources
     kubectl delete deployment ph-ee-connector-mastercard-cbs -n "$namespace" --ignore-not-found=true
-    kubectl delete deployment mastercard-cbs-simulator -n "$namespace" --ignore-not-found=true
     kubectl delete service ph-ee-connector-mastercard-cbs -n "$namespace" --ignore-not-found=true
-    kubectl delete service mastercard-simulator -n "$namespace" --ignore-not-found=true
     kubectl delete job ${cr_name}-data-loader -n "$namespace" --ignore-not-found=true
 
     # Remove BPMN workflows from Zeebe

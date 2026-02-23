@@ -161,10 +161,11 @@ SELECT '════════════════════════
 SELECT
     t.id AS 'ID',
     LEFT(t.transaction_id, 20) AS 'Transaction ID',
-    t.payee_party_id AS 'Payee',
+    CONCAT(COALESCE(t.payer_party_id, '?'), ' (', COALESCE(t.payer_dfsp_id, '?'), ')') AS 'Payer (DFSP)',
+    CONCAT(COALESCE(t.payee_party_id, '?'), ' (', COALESCE(t.payee_dfsp_id, '?'), ')') AS 'Payee (DFSP)',
     CONCAT(COALESCE(t.amount, 0), ' ', COALESCE(t.currency, 'USD')) AS 'Amount',
     t.status AS 'Status',
-    LEFT(COALESCE(t.external_id, 'N/A'), 35) AS 'Mastercard Payment ID',
+    CASE WHEN t.status_detail LIKE '%rem_%' THEN CONCAT('rem_', SUBSTRING_INDEX(t.status_detail, 'rem_', -1)) ELSE 'N/A' END AS 'Mastercard Payment ID',
     DATE_FORMAT(COALESCE(t.completed_at, t.started_at), '%H:%i:%s') AS 'Time'
 FROM transfers t
 ORDER BY t.id DESC
@@ -254,6 +255,6 @@ echo "Check pod status:"
 echo "  kubectl get pods -n mastercard-demo"
 echo ""
 echo "Query specific payment by Mastercard Payment ID:"
-echo "  kubectl exec -n paymenthub operationsmysql-0 -- mysql -uroot -pmysql operations_app -e \\"
-echo "    \"SELECT * FROM transfers WHERE external_id = 'rem_XXX' \\\\G\""
+echo "  kubectl exec -n paymenthub operationsmysql-0 -- mysql -uroot -pethieTieCh8ahv greenbank -e \\"
+echo "    \"SELECT transaction_id, amount, currency, status, status_detail, completed_at FROM transfers WHERE status_detail LIKE '%rem_XXX%' \\\\G\""
 echo ""

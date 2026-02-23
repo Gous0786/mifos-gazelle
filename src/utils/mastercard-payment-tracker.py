@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Mastercard Payment Tracker
-Tracks Mastercard CBS payments from CSV input through to simulator completion
+Tracks Mastercard CBS payments from CSV input through to sandbox completion
 """
 
 import subprocess
@@ -81,53 +81,6 @@ class MastercardPaymentTracker:
 
         return data
 
-    def get_simulator_payments(self, minutes: int = 5) -> List[Dict]:
-        """Get recent payment records from Mastercard CBS simulator logs"""
-        cmd = [
-            'kubectl', 'logs', '-n', 'mastercard-demo',
-            '-l', 'app=mastercard-cbs-simulator',
-            f'--since={minutes}m'
-        ]
-
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            return []
-
-        payments = []
-        # Parse log lines like: "Payment processed successfully - Payment ID: PAY_xxx, CBS Ref: CBS_xxx"
-        pattern = r'Payment initiation request received - Transaction: (.*?), Type: (.*?), Amount: ([\d.]+) (\w+), Payee: (.*?) (.*)'
-        success_pattern = r'Payment processed successfully - Payment ID: (PAY_[\w-]+), CBS Ref: (CBS_\d+)'
-
-        lines = result.stdout.split('\n')
-        current_payment = {}
-
-        for line in lines:
-            # Extract timestamp
-            timestamp_match = re.match(r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)', line)
-            timestamp = timestamp_match.group(1) if timestamp_match else None
-
-            # Match initiation
-            match = re.search(pattern, line)
-            if match:
-                current_payment = {
-                    'timestamp': timestamp,
-                    'amount': match.group(3),
-                    'currency': match.group(4),
-                    'payee_first': match.group(5),
-                    'payee_last': match.group(6)
-                }
-
-            # Match success
-            success_match = re.search(success_pattern, line)
-            if success_match and current_payment:
-                current_payment['payment_id'] = success_match.group(1)
-                current_payment['cbs_ref'] = success_match.group(2)
-                current_payment['status'] = 'COMPLETED'
-                payments.append(current_payment.copy())
-                current_payment = {}
-
-        return payments
-
     def get_connector_status(self, minutes: int = 5) -> List[Dict]:
         """Get payment status from Mastercard CBS connector logs"""
         cmd = [
@@ -170,35 +123,22 @@ class MastercardPaymentTracker:
 
         return statuses
 
-    def match_payments(self, csv_data: List[Dict], simulator_payments: List[Dict],
+    def match_payments(self, csv_data: List[Dict],
                       connector_status: List[Dict], supplementary_data: List[Dict]) -> List[Dict]:
         """Match payments across all data sources"""
         matched = []
 
-        # Match by amount and payee
         for csv_payment in csv_data:
             match_info = {
                 'csv': csv_payment,
-                'simulator': None,
                 'connector': None,
                 'supplementary': None
             }
 
-            # Find matching simulator payment by amount (handle decimal matching)
-            for sim_payment in simulator_payments:
-                csv_amount = float(csv_payment['amount'])
-                sim_amount = float(sim_payment['amount'])
-                if abs(csv_amount - sim_amount) < 0.01:  # Allow small floating point differences
-                    match_info['simulator'] = sim_payment
-
-                    # Find connector status by payment_id
-                    if sim_payment.get('payment_id'):
-                        for conn_status in connector_status:
-                            if conn_status.get('external_id') == sim_payment['payment_id']:
-                                match_info['connector'] = conn_status
-                                break
-
-                    simulator_payments.remove(sim_payment)
+            # Find connector status by transaction_id (request_id from CSV)
+            for conn_status in connector_status:
+                if conn_status.get('transaction_id') == csv_payment['request_id']:
+                    match_info['connector'] = conn_status
                     break
 
             # Find supplementary data by payee MSISDN
@@ -222,7 +162,6 @@ class MastercardPaymentTracker:
 
         for i, match in enumerate(matched_payments, 1):
             csv = match['csv']
-            sim = match['simulator']
             conn = match['connector']
             supp = match['supplementary']
 
@@ -248,16 +187,6 @@ class MastercardPaymentTracker:
             else:
                 print(f"\n📋 Supplementary Data: ⚠️  NOT FOUND")
 
-            # Simulator Result
-            if sim:
-                print(f"\n🏦 Mastercard CBS Simulator:")
-                print(f"   Payment ID:       {sim.get('payment_id', 'N/A')}")
-                print(f"   CBS Reference:    {sim.get('cbs_ref', 'N/A')}")
-                print(f"   Status:           ✅ {sim.get('status', 'N/A')}")
-                print(f"   Timestamp:        {sim.get('timestamp', 'N/A')}")
-            else:
-                print(f"\n🏦 Mastercard CBS Simulator: ❌ NOT PROCESSED")
-
             # Connector Status
             if conn:
                 status_icon = '✅' if conn.get('success') else '❌'
@@ -281,9 +210,6 @@ class MastercardPaymentTracker:
         print(f"   ✓ Loaded {len(csv_data)} payments from CSV")
 
         print("\n📊 Querying Mastercard infrastructure...")
-        simulator_payments = self.get_simulator_payments(minutes=10)
-        print(f"   ✓ Found {len(simulator_payments)} payments in simulator logs")
-
         connector_status = self.get_connector_status(minutes=10)
         print(f"   ✓ Found {len(connector_status)} status updates from connector")
 
@@ -291,14 +217,14 @@ class MastercardPaymentTracker:
         print(f"   ✓ Found {len(supplementary_data)} records in supplementary data")
 
         print("\n🔗 Matching payments across systems...")
-        matched = self.match_payments(csv_data, simulator_payments, connector_status, supplementary_data)
+        matched = self.match_payments(csv_data, connector_status, supplementary_data)
 
         self.print_report(matched)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Track Mastercard CBS payments from CSV to simulator',
+        description='Track Mastercard CBS payments from CSV to sandbox',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

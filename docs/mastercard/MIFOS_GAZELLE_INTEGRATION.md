@@ -169,8 +169,6 @@ operations_db = operations
 enabled = true
 connector_image = ph-ee-connector-mastercard-cbs:1.0.0
 api_url = https://sandbox.api.mastercard.com
-# Or for local testing:
-# api_url = http://mastercard-simulator.mastercard-simulator.svc.cluster.local:8080
 partner_id = ${MASTERCARD_PARTNER_ID}
 ```
 
@@ -421,14 +419,6 @@ kubectl create deployment ph-ee-connector-mastercard-cbs \
   --image=${MASTERCARD_CBS_IMAGE} \
   -n ${PH_NAMESPACE}
 
-# Deploy Mock Simulator (if not using real sandbox)
-if [ "$USE_CBS_MOCK" = "true" ]; then
-  kubectl create namespace mastercard-simulator || true
-  kubectl create deployment mastercard-cbs-simulator \
-    --image=mastercard-cbs-simulator:1.0.0 \
-    -n mastercard-simulator
-fi
-
 # Load supplementary data
 mysql -h operationsmysql -u root -p${MYSQL_PASSWORD} operations \
   < ~/ph-ee-connector-mccbs/src/utils/data-loading/mastercard-cbs-schema.sql
@@ -446,10 +436,8 @@ echo "Mastercard CBS deployment complete"
 
 [mastercard_cbs]
 enabled=true
-use_mock=true  # false for real sandbox
 connector_image=ph-ee-connector-mastercard-cbs:1.0.0
-simulator_image=mastercard-cbs-simulator:1.0.0
-api_url=http://mastercard-simulator.mastercard-simulator.svc.cluster.local:8080
+api_url=https://sandbox.api.mastercard.com
 ```
 
 ---

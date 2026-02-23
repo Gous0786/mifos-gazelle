@@ -406,8 +406,5 @@ function deployApps() {
     esac
   done
 
-  # Configure Docker Hub authentication if credentials are available
-  configure_dockerhub_auth
-
   print_deployment_end_message
 }
