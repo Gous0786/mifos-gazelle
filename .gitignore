@@ -188,6 +188,7 @@ Thumbs.db
 sds_*
 
 # AI related metadata
+.claude* 
 *.openai
 *.copilot
 CLAUDE.local.md
