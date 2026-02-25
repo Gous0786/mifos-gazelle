@@ -201,13 +201,22 @@ ph-ee-engine:
       replicas: 1
       logLevel: debug
 
+      env: 
+      - name: JAVA_TOOL_OPTIONS
+        value: |
+          -Xms64m
+          -Xmx256m
+          -XX:+UseSerialGC
+          -XX:ReservedCodeCacheSize=32m
+          -XX:MaxMetaspaceSize=96m
+          -XX:+HeapDumpOnOutOfMemoryError
+    
       resources:
         requests:
           cpu: 100m
           memory: 450Mi
         limits:
-          cpu: 400m
-          memory: 450Mi  
+          memory: 600Mi  
       affinity: {}
 
       ingress:

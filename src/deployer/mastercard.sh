@@ -409,13 +409,13 @@ deploy_mastercard() {
     configure_payment_mode
     verify_deployment
 
-    echo -e "\n${GREEN}=================================="
-    echo -e "Mastercard CBS Deployed"
-    echo -e "==================================${RESET}\n"
+    echo -e "\n${GREEN}    =================================="
+    echo -e "    Mastercard CBS Deployed"
+    echo -e "    ==================================${RESET}\n"
 
     echo "    Namespace:  $MASTERCARD_NAMESPACE"
     echo "    Sample CSV: $RUN_DIR/src/utils/data-loading/bulk-gazelle-mastercard-6.csv"
-    echo "    Submit:     ./submit-batch.py -c $CONFIG_FILE_PATH -f bulk-gazelle-mastercard-6.csv --tenant greenbank-mastercard"
+    echo "    Submit:     $RUN_DIR/src/utils/data-loading/submit-batch.py -c $CONFIG_FILE_PATH -f $RUN_DIR/src/utils/data-loading/bulk-gazelle-mastercard-6.csv --tenant greenbank"
     echo "    Verify:     $RUN_DIR/src/utils/mastercard/verify-mastercard-batch.sh -k"
     echo ""
 }
