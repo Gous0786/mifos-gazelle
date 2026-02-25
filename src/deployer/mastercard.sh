@@ -93,9 +93,13 @@ create_secrets() {
 
     if run_as_user "kubectl get secret operationsmysql -n $PAYMENTHUB_NAMESPACE" &> /dev/null; then
         if ! run_as_user "kubectl get secret mysql-secret -n $MASTERCARD_NAMESPACE" &> /dev/null; then
-            run_as_user "kubectl get secret operationsmysql -n $PAYMENTHUB_NAMESPACE -o yaml" \
-                | sed "s/namespace: $PAYMENTHUB_NAMESPACE/namespace: $MASTERCARD_NAMESPACE/" \
-                | sed "s/name: operationsmysql/name: mysql-secret/" \
+            run_as_user "kubectl get secret operationsmysql -n $PAYMENTHUB_NAMESPACE -o json" \
+                | jq --arg ns "$MASTERCARD_NAMESPACE" '
+                    .metadata.namespace = $ns |
+                    .metadata.name = "mysql-secret" |
+                    .data.password = .data["mysql-root-password"] |
+                    del(.metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp)
+                ' \
                 | run_as_user "kubectl apply -f -" > /dev/null 2>&1
             logWithVerboseCheck "$debug" "$INFO" "Copied operationsmysql as mysql-secret to $MASTERCARD_NAMESPACE"
         fi
