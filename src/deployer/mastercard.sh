@@ -91,6 +91,31 @@ create_secrets() {
         logWithVerboseCheck "$debug" "$INFO" "Created mastercard-cbs-credentials secret"
     fi
 
+    local signing_key_path encryption_cert_path decryption_key_path
+    signing_key_path=$(expand_tilde "${MASTERCARD_SIGNING_KEY_PATH:-}")
+    encryption_cert_path=$(expand_tilde "${MASTERCARD_ENCRYPTION_CERT_PATH:-}")
+    decryption_key_path=$(expand_tilde "${MASTERCARD_DECRYPTION_KEY_PATH:-}")
+
+    if [ -n "$signing_key_path" ]; then
+        if ! run_as_user "kubectl get secret mastercard-cbs-certs -n $MASTERCARD_NAMESPACE" &> /dev/null; then
+            if [ ! -f "$signing_key_path" ]; then
+                logWithLevel "$ERROR" "MASTERCARD_SIGNING_KEY_PATH not found: $signing_key_path"
+                return 1
+            fi
+            local cert_args="--from-file=signing-key.p12=${signing_key_path}"
+            [ -n "$encryption_cert_path" ] && [ -f "$encryption_cert_path" ] && \
+                cert_args="$cert_args --from-file=encryption-key.p12=${encryption_cert_path}"
+            [ -n "$decryption_key_path" ] && [ -f "$decryption_key_path" ] && \
+                cert_args="$cert_args --from-file=decryption-key.pem=${decryption_key_path}"
+            run_as_user "kubectl create secret generic mastercard-cbs-certs \
+                -n $MASTERCARD_NAMESPACE \
+                $cert_args" > /dev/null 2>&1
+            logWithVerboseCheck "$debug" "$INFO" "Created mastercard-cbs-certs secret from local cert files"
+        fi
+    else
+        logWithVerboseCheck "$debug" "$WARNING" "MASTERCARD_SIGNING_KEY_PATH not set - certs must be bundled in Docker image (localdev only)"
+    fi
+
     if run_as_user "kubectl get secret operationsmysql -n $PAYMENTHUB_NAMESPACE" &> /dev/null; then
         if ! run_as_user "kubectl get secret mysql-secret -n $MASTERCARD_NAMESPACE" &> /dev/null; then
             run_as_user "kubectl get secret operationsmysql -n $PAYMENTHUB_NAMESPACE -o json" \

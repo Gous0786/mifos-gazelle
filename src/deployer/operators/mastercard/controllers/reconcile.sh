@@ -201,6 +201,44 @@ deploy_connector() {
         image_tag=$(echo "$cr_json" | jq -r '.spec.image.tag // "1.0.0"')
     fi
 
+    # Mount cert secret if it exists (created by mastercard.sh from local cert files).
+    # This is the correct approach for Docker image deployments and remote clusters.
+    local cert_env_section=""
+    if kubectl get secret mastercard-cbs-certs -n "$namespace" >/dev/null 2>&1; then
+        log_info "Found mastercard-cbs-certs secret - mounting certs from secret (file: paths)"
+        cert_env_section="        - name: MASTERCARD_SIGNING_KEY_FILE
+          value: \"file:/opt/mastercard/certs/signing-key.p12\"
+        - name: MASTERCARD_ENCRYPTION_CERT
+          value: \"file:/opt/mastercard/certs/encryption-key.p12\"
+        - name: MASTERCARD_DECRYPTION_KEY
+          value: \"file:/opt/mastercard/certs/decryption-key.pem\""
+
+        local cert_mount="        - name: mastercard-certs
+          mountPath: /opt/mastercard/certs
+          readOnly: true"
+        local cert_volume="      - name: mastercard-certs
+        secret:
+          secretName: mastercard-cbs-certs"
+
+        if [ -z "$volumemounts_section" ]; then
+            volumemounts_section="        volumeMounts:
+${cert_mount}"
+        else
+            volumemounts_section="${volumemounts_section}
+${cert_mount}"
+        fi
+
+        if [ -z "$volumes_section" ]; then
+            volumes_section="      volumes:
+${cert_volume}"
+        else
+            volumes_section="${volumes_section}
+${cert_volume}"
+        fi
+    else
+        log_info "No mastercard-cbs-certs secret found - certs must be bundled in image (classpath)"
+    fi
+
     local replicas
     replicas=$(echo "$cr_json" | jq -r '.spec.replicas // 1')
     local mastercard_api_url
@@ -296,6 +334,7 @@ ${command_section}
             secretKeyRef:
               name: mysql-secret
               key: password
+${cert_env_section}
 ${volumemounts_section}
         resources:
           limits:
