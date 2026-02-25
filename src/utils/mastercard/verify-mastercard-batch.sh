@@ -210,6 +210,45 @@ LIMIT 10;
 
 SELECT '' AS '';
 SELECT '════════════════════════════════════════════════════════════════' AS '';
+SELECT '  SUPPLEMENTARY DATA FOR RECENT PAYEES' AS '';
+SELECT '════════════════════════════════════════════════════════════════' AS '';
+
+-- Cross-reference transfers with Mastercard supplementary data to verify
+-- what name/bank was actually sent to the Mastercard CBS API
+SELECT
+    t.PAYEE_PARTY_ID AS 'Payee MSISDN',
+    COALESCE(s.recipient_first_name, '!! NOT LOADED !!') AS 'First Name',
+    COALESCE(s.recipient_last_name, '!! NOT LOADED !!') AS 'Last Name',
+    COALESCE(s.bank_name, 'N/A') AS 'Beneficiary Bank',
+    COALESCE(s.bank_swift_code, 'N/A') AS 'SWIFT',
+    COALESCE(s.payee_account_number, 'N/A') AS 'Account Number',
+    COUNT(t.ID) AS '# Xfers'
+FROM transfers t
+LEFT JOIN operations.mastercard_cbs_supplementary_data s
+    ON t.PAYEE_PARTY_ID = s.payee_msisdn
+WHERE (t.STARTED_AT >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+   OR t.COMPLETED_AT >= DATE_SUB(NOW(), INTERVAL 24 HOUR))
+GROUP BY t.PAYEE_PARTY_ID, s.recipient_first_name, s.recipient_last_name,
+         s.bank_name, s.bank_swift_code, s.payee_account_number
+ORDER BY t.PAYEE_PARTY_ID;
+
+SELECT '' AS '';
+SELECT '════════════════════════════════════════════════════════════════' AS '';
+SELECT '  ALL SUPPLEMENTARY DATA ENTRIES' AS '';
+SELECT '════════════════════════════════════════════════════════════════' AS '';
+
+SELECT
+    s.payee_msisdn AS 'MSISDN',
+    s.recipient_first_name AS 'First Name',
+    s.recipient_last_name AS 'Last Name',
+    s.bank_swift_code AS 'SWIFT',
+    s.recipient_address_country AS 'Country',
+    LEFT(s.payee_account_number, 30) AS 'Account'
+FROM operations.mastercard_cbs_supplementary_data s
+ORDER BY s.payee_msisdn;
+
+SELECT '' AS '';
+SELECT '════════════════════════════════════════════════════════════════' AS '';
 SELECT 'Report generated:', NOW() AS '' FROM dual;
 SELECT '════════════════════════════════════════════════════════════════' AS '';
 EOF

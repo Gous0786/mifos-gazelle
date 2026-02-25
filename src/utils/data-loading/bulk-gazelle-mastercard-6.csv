@@ -1,7 +1,0 @@
-id,request_id,payment_mode,payer_identifier_type,payer_identifier,payee_identifier_type,payee_identifier,amount,currency,note
-0,9c8a98c7-213e-42ae-a16f-0d46f905b6aa,MASTERCARD_CBS,MSISDN,0413509790,MSISDN,0495822412,10,USD,Payment to James Ramirez
-1,dde4533f-e2e9-44fb-90c3-48fec62fed5b,MASTERCARD_CBS,MSISDN,0413509790,MSISDN,0495822412,16,USD,Payment to James Ramirez
-2,d7b45124-6cab-4467-9e39-e5fff02f81d6,MASTERCARD_CBS,MSISDN,0413509790,MSISDN,0424942603,10,USD,Payment to Caleb Harris
-3,2a3a5045-f7fc-46b8-b383-ef8f545819d2,MASTERCARD_CBS,MSISDN,0413509790,MSISDN,0424942603,16,USD,Payment to Caleb Harris
-4,6a89345c-df8d-49f9-b13d-dda4f691dd85,MASTERCARD_CBS,MSISDN,0413509790,MSISDN,0445271476,10,USD,Payment to Scarlett Taylor
-5,3e976542-41dc-4d40-ae99-d3f628abc1df,MASTERCARD_CBS,MSISDN,0413509790,MSISDN,0445271476,16,USD,Payment to Scarlett Taylor

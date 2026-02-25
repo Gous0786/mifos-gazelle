@@ -52,6 +52,7 @@ function deployPH(){
   else
     deploy_bpmns
   fi
+  generate_sample_csvs
   echo -e "\n${GREEN}============================"
   echo -e "Paymenthub Deployed"
   echo -e "============================${RESET}\n"
@@ -187,6 +188,36 @@ deploy_bpmns() {
 #   $1 - Minimum required number of BPMNs (default: 1)
 # Returns:
 #   0 if the required number of BPMNs are loaded, 1 otherwise.
+#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+# Function: generate_sample_csvs
+# Description: Generates sample bulk payment CSV files for closedloop and mojaloop
+#              testing. Called at the end of deployPH so Mifos clients exist.
+#              Files are gitignored and recreated on each deploy.
+#------------------------------------------------------------------------------
+generate_sample_csvs() {
+    local csv_generator="$RUN_DIR/src/utils/data-loading/generate-example-csv-files.py"
+    local output_dir="$RUN_DIR/src/utils/data-loading"
+
+    if [ ! -f "$csv_generator" ]; then
+        logWithVerboseCheck "$debug" "$WARNING" "CSV generator not found: $csv_generator"
+        return 0
+    fi
+
+    logWithVerboseCheck "$debug" "$INFO" "Generating sample CSV files (closedloop + mojaloop, 4 rows each)"
+    if [ "$debug" == "true" ]; then
+        run_as_user "python3 \"$csv_generator\" -c \"$CONFIG_FILE_PATH\" --mode closedloop --num-rows 4 --output-dir \"$output_dir\""
+        run_as_user "python3 \"$csv_generator\" -c \"$CONFIG_FILE_PATH\" --mode mojaloop --num-rows 4 --output-dir \"$output_dir\""
+    else
+        run_as_user "python3 \"$csv_generator\" -c \"$CONFIG_FILE_PATH\" --mode closedloop --num-rows 4 --output-dir \"$output_dir\"" > /tmp/phee-csv-gen.log 2>&1
+        run_as_user "python3 \"$csv_generator\" -c \"$CONFIG_FILE_PATH\" --mode mojaloop --num-rows 4 --output-dir \"$output_dir\"" >> /tmp/phee-csv-gen.log 2>&1
+    fi
+
+    if [ $? -ne 0 ]; then
+        logWithVerboseCheck "$debug" "$WARNING" "CSV generation failed (see /tmp/phee-csv-gen.log)"
+    fi
+}
+
 #------------------------------------------------------------------------------
 are_bpmns_loaded() {
     local MIN_REQUIRED=${1:-1}

@@ -1,5 +1,0 @@
-id,request_id,payment_mode,payer_identifier_type,payer_identifier,payee_identifier_type,payee_identifier,amount,currency,note
-0,3c4b21aa-5296-4f0a-bc7b-2c822fb8294d,MOJALOOP,MSISDN,0413509790,MSISDN,0495822412,10,USD,Payment to James Ramirez
-1,f771da5e-fd4d-45ee-8c8c-80a1ff040177,MOJALOOP,MSISDN,0413509790,MSISDN,0495822412,16,USD,Payment to James Ramirez
-2,4791630d-5042-4a77-8212-e97dfb20e013,MOJALOOP,MSISDN,0413509790,MSISDN,0424942603,10,USD,Payment to Caleb Harris
-3,90d2a8e6-d5a7-4f65-bb52-57d0637acdee,MOJALOOP,MSISDN,0413509790,MSISDN,0424942603,16,USD,Payment to Caleb Harris

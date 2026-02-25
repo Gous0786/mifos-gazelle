@@ -103,6 +103,8 @@ CONFIG_FILE=""
 REGENERATE=false
 DROP_TABLE=false
 NAMESPACE="paymenthub"
+INFRA_NAMESPACE="infra"
+MIFOS_MYSQL_POD="mysql-0"
 DEBUG=false
 
 usage() {
@@ -196,10 +198,38 @@ get_ini_value() {
     ' "$file"
 }
 
-# Get random element from array
-random_element() {
+# Get element from array using a deterministic hash of seed string
+# Produces the same result for the same (array, seed) pair across runs
+deterministic_element() {
     local -n arr=$1
-    echo "${arr[$RANDOM % ${#arr[@]}]}"
+    local seed=$2
+    local hash
+    hash=$(echo -n "$seed" | cksum | cut -d' ' -f1)
+    local idx=$((hash % ${#arr[@]}))
+    echo "${arr[$idx]}"
+}
+
+# Look up real client name from MifosX for a given MSISDN + institution.
+# Returns "FirstName|LastName" if found, empty string if not found.
+get_mifos_client_name() {
+    local msisdn=$1
+    local institution=$2
+    local db="${institution,,}"  # institution code == MifosX database name
+
+    local MIFOS_DB_PASS
+    MIFOS_DB_PASS=$(run_as_k8s_user "kubectl exec -n $INFRA_NAMESPACE $MIFOS_MYSQL_POD -- printenv MYSQL_ROOT_PASSWORD" 2>/dev/null)
+    if [[ -z "$MIFOS_DB_PASS" ]]; then
+        return
+    fi
+
+    local result
+    result=$(run_as_k8s_user "kubectl exec -n $INFRA_NAMESPACE $MIFOS_MYSQL_POD -- mysql -uroot -p'$MIFOS_DB_PASS' $db -N -s -e \"SELECT firstname, lastname FROM m_client WHERE mobile_no = '$msisdn' LIMIT 1\"" 2>/dev/null)
+    if [[ -n "$result" ]]; then
+        local fn ln
+        fn=$(echo "$result" | cut -f1)
+        ln=$(echo "$result" | cut -f2)
+        echo "${fn}|${ln}"
+    fi
 }
 
 # Map institution to country
@@ -249,28 +279,31 @@ generate_test_iban() {
     esac
 }
 
-# Get bank data for country
+# Get bank data for country — deterministic for a given MSISDN seed
 get_bank_data() {
     local country=$1
+    local seed=$2
     local var_name="BANKS_${country}[@]"
     local banks=("${!var_name}")
-    random_element banks
+    deterministic_element banks "${seed}_bank"
 }
 
-# Get name data for country
+# Get name data for country — deterministic for a given MSISDN seed
 get_name_data() {
     local country=$1
+    local seed=$2
     local var_name="NAMES_${country}[@]"
     local names=("${!var_name}")
-    random_element names
+    deterministic_element names "${seed}_name"
 }
 
-# Get city for country
+# Get city for country — deterministic for a given MSISDN seed
 get_city() {
     local country=$1
+    local seed=$2
     local var_name="CITIES_${country}[@]"
     local cities=("${!var_name}")
-    random_element cities
+    deterministic_element cities "${seed}_city"
 }
 
 echo "======================================================================"
@@ -379,7 +412,7 @@ CREATE_TABLE_SQL="CREATE TABLE IF NOT EXISTS mastercard_cbs_supplementary_data (
     beneficiary_currency VARCHAR(3) NOT NULL DEFAULT 'ZAR',
     beneficiary_currency_decimal_precision INT NOT NULL DEFAULT 2,
     destination_service_tag VARCHAR(20) NOT NULL DEFAULT 'ZAK-BK',
-    payment_type VARCHAR(10) NOT NULL DEFAULT 'G2P',
+    payment_type VARCHAR(10) NOT NULL DEFAULT 'B2P',
     -- Variable fields based on account details (per PHEE-351)
     recipient_first_name VARCHAR(100),
     recipient_last_name VARCHAR(100),
@@ -422,7 +455,7 @@ if [[ "$DEBUG" == "true" ]]; then
     echo "│   beneficiary_currency                VARCHAR(3)   DEFAULT 'ZAR'"
     echo "│   beneficiary_currency_decimal_precision INT       DEFAULT 2"
     echo "│   destination_service_tag             VARCHAR(20)  DEFAULT 'ZAK-BK'"
-    echo "│   payment_type                        VARCHAR(10)  DEFAULT 'G2P'"
+    echo "│   payment_type                        VARCHAR(10)  DEFAULT 'B2P'"
     echo "│"
     echo "│ NOTE: All 9 static fields from PHEE-351 specification present"
     echo "│"
@@ -547,19 +580,35 @@ while IFS=$'\t' read -r msisdn account institution; do
     # Generate IBAN-formatted account number for Mastercard CBS API
     iban_account=$(generate_test_iban "$country" "$msisdn")
 
-    # Get random bank, name, city for this country
-    bank_data=$(get_bank_data "$country")
+    # Get deterministic bank and city for this country (keyed on MSISDN so
+    # the same MSISDN always gets the same bank/city across re-runs)
+    bank_data=$(get_bank_data "$country" "$msisdn")
     bank_name=$(echo "$bank_data" | cut -d'|' -f1)
     bank_swift=$(echo "$bank_data" | cut -d'|' -f2)
     bank_branch=$(echo "$bank_data" | cut -d'|' -f3)
 
-    name_data=$(get_name_data "$country")
-    first_name=$(echo "$name_data" | cut -d'|' -f1)
-    last_name=$(echo "$name_data" | cut -d'|' -f2)
+    city=$(get_city "$country" "$msisdn")
 
-    city=$(get_city "$country")
+    # Prefer real client name from MifosX over generated country-based name
+    mifos_name=$(get_mifos_client_name "$msisdn" "$institution")
+    if [[ -n "$mifos_name" ]]; then
+        first_name=$(echo "$mifos_name" | cut -d'|' -f1)
+        last_name=$(echo "$mifos_name" | cut -d'|' -f2)
+        if [[ "$DEBUG" == "true" ]]; then
+            echo "  → MifosX name found: $first_name $last_name"
+        fi
+    else
+        # Deterministic fallback: same MSISDN always gets same name across runs
+        name_data=$(get_name_data "$country" "$msisdn")
+        first_name=$(echo "$name_data" | cut -d'|' -f1)
+        last_name=$(echo "$name_data" | cut -d'|' -f2)
+        if [[ "$DEBUG" == "true" ]]; then
+            echo "  → MifosX lookup failed, using deterministic fallback: $first_name $last_name"
+        fi
+    fi
     street="${STREETS[$country]}"
-    street_num=$((RANDOM % 999 + 1))
+    street_hash=$(echo -n "${msisdn}_street" | cksum | cut -d' ' -f1)
+    street_num=$(( (street_hash % 999) + 1 ))
     address="$street_num $street"
 
     email_domain="${EMAIL_DOMAINS[$country]}"
@@ -623,7 +672,7 @@ while IFS=$'\t' read -r msisdn account institution; do
         echo "│   beneficiary_currency            = (default: ZAR)"
         echo "│   beneficiary_currency_decimal_precision = (default: 2)"
         echo "│   destination_service_tag         = (default: ZAK-BK)"
-        echo "│   payment_type                    = (default: G2P)"
+        echo "│   payment_type                    = (default: B2P)"
         echo "│"
         echo "│ VARIABLE FIELDS (per beneficiary):"
         echo "│   payee_msisdn                = $msisdn"
