@@ -9,11 +9,21 @@ fi
 
 #------------------------------------------------------------------------------
 # Function : check_sudo
-# Description: Checks if the script is run with sudo or as root user.
+# Description: Checks if the script is run with sudo from a non-root user.
+#              Rejects direct root execution (e.g. 'sudo su -') because
+#              SUDO_USER is cleared by su login shells, making it impossible
+#              to determine the real invoking user and causing all artifacts
+#              to be owned by root.
 #------------------------------------------------------------------------------
 function check_sudo() {
     if [[ $EUID -ne 0 ]]; then
-        printf "** Error: This script must be run with sudo or as root user ** \n"
+        printf "** Error: This script must be run with sudo, e.g: sudo ./run.sh ** \n"
+        exit 1
+    fi
+    if [[ -z "${SUDO_USER:-}" || "${SUDO_USER}" == "root" ]]; then
+        printf "** Error: Do not run this script as root directly (e.g. via 'sudo su -').\n"
+        printf "   Run it as your normal user with sudo: sudo ./run.sh\n"
+        printf "   This ensures deployment artifacts are owned by you, not root.\n **\n"
         exit 1
     fi
 }
