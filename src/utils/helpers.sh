@@ -17,13 +17,13 @@ fi
 #------------------------------------------------------------------------------
 function check_sudo() {
     if [[ $EUID -ne 0 ]]; then
-        printf "** Error: This script must be run with sudo, e.g: sudo ./run.sh ** \n"
+        log_error "This script must be run with sudo: sudo ./run.sh"
         exit 1
     fi
     if [[ -z "${SUDO_USER:-}" || "${SUDO_USER}" == "root" ]]; then
-        printf "** Error: Do not run this script as root directly (e.g. via 'sudo su -').\n"
-        printf "   Run it as your normal user with sudo: sudo ./run.sh\n"
-        printf "   This ensures deployment artifacts are owned by you, not root.\n **\n"
+        log_error "Do not run as root directly (e.g. via 'sudo su -')."
+        log_error "Run as your normal user with sudo: sudo ./run.sh"
+        echo  "       Deployment artifacts must be owned by you, not root."
         exit 1
     fi
 }
@@ -62,8 +62,8 @@ function check_command_execution() {
     local exit_code=$1
     local cmd="$2"
     if [[ $exit_code -ne 0 ]]; then
-        echo "  ** Error: Command execution failed: $cmd ** "
-        logWithVerboseCheck "$debug" error "Failed to execute: $cmd"
+        log_failed
+        log_error "Command failed: $cmd"
         exit $exit_code
     fi
 }

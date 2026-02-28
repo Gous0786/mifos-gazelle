@@ -38,7 +38,6 @@ resolve_config_file() {
 }
 
 check_prerequisites() {
-    # Apply defaults if not set by config (must happen after config loading)
     MASTERCARD_NAMESPACE="${MASTERCARD_NAMESPACE:-mastercard-demo}"
     MASTERCARD_ENABLED="${MASTERCARD_ENABLED:-true}"
     MASTERCARD_CBS_HOME="${MASTERCARD_CBS_HOME:-~/ph-ee-connector-mccbs}"
@@ -47,24 +46,24 @@ check_prerequisites() {
     PAYMENTHUB_NAMESPACE="${PH_NAMESPACE:-paymenthub}"
 
     if ! command -v kubectl &> /dev/null; then
-        logWithLevel "$ERROR" "kubectl not found. Please install kubectl."
+        log_error "kubectl not found. Please install kubectl."
         exit 1
     fi
 
     if ! command -v jq &> /dev/null; then
-        logWithLevel "$ERROR" "jq not found. Please install jq."
+        log_error "jq not found. Please install jq."
         exit 1
     fi
 
     if [ ! -d "$MASTERCARD_CBS_HOME" ]; then
-        logWithLevel "$ERROR" "Mastercard CBS directory not found at: $MASTERCARD_CBS_HOME"
-        logWithLevel "$ERROR" "Please set MASTERCARD_CBS_HOME or ensure ~/ph-ee-connector-mccbs exists"
+        log_error "Mastercard CBS directory not found: $MASTERCARD_CBS_HOME"
+        log_error "Set MASTERCARD_CBS_HOME or ensure ~/ph-ee-connector-mccbs exists"
         exit 1
     fi
 
     if ! run_as_user "kubectl get namespace \"$PAYMENTHUB_NAMESPACE\"" &> /dev/null; then
-        logWithLevel "$WARNING" "PaymentHub namespace not found: $PAYMENTHUB_NAMESPACE"
-        logWithLevel "$WARNING" "Mastercard CBS requires PaymentHub to be deployed first"
+        log_warn "PaymentHub namespace not found: $PAYMENTHUB_NAMESPACE"
+        log_warn "Mastercard CBS requires PaymentHub to be deployed first"
     fi
 }
 
@@ -99,7 +98,7 @@ create_secrets() {
     if [ -n "$signing_key_path" ]; then
         if ! run_as_user "kubectl get secret mastercard-cbs-certs -n $MASTERCARD_NAMESPACE" &> /dev/null; then
             if [ ! -f "$signing_key_path" ]; then
-                logWithLevel "$ERROR" "MASTERCARD_SIGNING_KEY_PATH not found: $signing_key_path"
+                log_error "MASTERCARD_SIGNING_KEY_PATH not found: $signing_key_path"
                 return 1
             fi
             local cert_args="--from-file=signing-key.p12=${signing_key_path}"
@@ -129,7 +128,7 @@ create_secrets() {
             logWithVerboseCheck "$debug" "$INFO" "Copied operationsmysql as mysql-secret to $MASTERCARD_NAMESPACE"
         fi
     else
-        logWithLevel "$WARNING" "operationsmysql secret not found in $PAYMENTHUB_NAMESPACE"
+        log_warn "operationsmysql secret not found in $PAYMENTHUB_NAMESPACE"
     fi
 }
 
@@ -137,7 +136,7 @@ deploy_operator() {
     local operator_dir="$RUN_DIR/src/deployer/operators/mastercard"
 
     if [ ! -d "$operator_dir" ]; then
-        logWithLevel "$ERROR" "Operator directory not found: $operator_dir"
+        log_error "Operator directory not found: $operator_dir"
         exit 1
     fi
 
@@ -155,7 +154,7 @@ deploy_operator() {
     cd "$RUN_DIR"
 
     if [ $rc -ne 0 ]; then
-        logWithLevel "$ERROR" "Failed to deploy operator"
+        log_error "Failed to deploy operator"
         exit 1
     fi
 }
@@ -226,16 +225,14 @@ EOF
     local rc=$?
 
     if [ $rc -ne 0 ]; then
-        logWithLevel "$ERROR" "Failed to apply connector CR"
-        logWithLevel "$ERROR" "$apply_output"
+        log_error "Failed to apply connector CR: $apply_output"
         return 1
     fi
     logWithVerboseCheck "$debug" "$INFO" "Connector CR: $apply_output"
 }
 
 wait_for_deployment() {
-    echo "    Waiting for pods to be ready..."
-
+    log_step "Waiting for Mastercard connector pods"
     local timeout=300
     local elapsed=0
 
@@ -249,7 +246,7 @@ wait_for_deployment() {
         sleep 5
         elapsed=$((elapsed + 5))
     done
-
+    log_ok
 }
 
 deploy_bpmn_workflow() {
@@ -257,12 +254,12 @@ deploy_bpmn_workflow() {
     local deploy_script="$RUN_DIR/src/utils/deployBpmn-gazelle.sh"
 
     if [ ! -f "$workflow_file" ]; then
-        logWithLevel "$WARNING" "BPMN workflow not found: $workflow_file"
+        log_warn "BPMN workflow not found: $workflow_file"
         return 1
     fi
 
     if [ ! -f "$deploy_script" ]; then
-        logWithLevel "$WARNING" "deployBpmn-gazelle.sh not found: $deploy_script"
+        log_warn "deployBpmn-gazelle.sh not found: $deploy_script"
         return 1
     fi
 
@@ -270,23 +267,23 @@ deploy_bpmn_workflow() {
     config_file=$(resolve_config_file)
 
     if [ ! -f "$config_file" ]; then
-        logWithLevel "$ERROR" "Config file not found: $config_file"
+        log_error "Config file not found: $config_file"
         return 1
     fi
 
     logWithVerboseCheck "$debug" "$INFO" "Deploying BPMN workflow for greenbank"
     if run_as_user "bash \"$deploy_script\" -c \"$config_file\" -f \"$workflow_file\" -t greenbank" > /dev/null 2>&1; then
-        logWithVerboseCheck "$debug" "$INFO" "Workflow deployed for greenbank"
+        logWithVerboseCheck "$debug" "$DEBUG" "BPMN deployed for greenbank"
     else
-        logWithLevel "$WARNING" "Failed to deploy workflow for greenbank"
+        log_warn "Failed to deploy BPMN workflow for greenbank"
         return 1
     fi
 
     for tenant in redbank bluebank; do
         if run_as_user "bash \"$deploy_script\" -c \"$config_file\" -f \"$workflow_file\" -t $tenant" > /dev/null 2>&1; then
-            logWithVerboseCheck "$debug" "$INFO" "Workflow deployed for $tenant"
+            logWithVerboseCheck "$debug" "$DEBUG" "BPMN deployed for $tenant"
         else
-            logWithVerboseCheck "$debug" "$INFO" "Skipped $tenant (tenant may not exist)"
+            logWithVerboseCheck "$debug" "$DEBUG" "Skipped $tenant (tenant may not exist)"
         fi
     done
 }
@@ -297,12 +294,12 @@ load_supplementary_data() {
     config_file=$(resolve_config_file)
 
     if [ ! -f "$data_loader" ]; then
-        logWithLevel "$WARNING" "Supplementary data loader not found: $data_loader"
+        log_warn "Supplementary data loader not found: $data_loader"
         return 0
     fi
 
     if [ ! -f "$config_file" ]; then
-        logWithLevel "$WARNING" "Config file not found, skipping supplementary data load"
+        log_warn "Config file not found, skipping supplementary data load"
         return 0
     fi
 
@@ -314,7 +311,7 @@ load_supplementary_data() {
     fi
 
     if [ $? -ne 0 ]; then
-        logWithLevel "$WARNING" "Supplementary data load failed (see /tmp/mastercard-data-load.log)"
+        log_warn "Supplementary data load failed (see /tmp/mastercard-data-load.log)"
     fi
 }
 
@@ -324,12 +321,12 @@ generate_mastercard_csv() {
     config_file=$(resolve_config_file)
 
     if [ ! -f "$csv_generator" ]; then
-        logWithLevel "$WARNING" "CSV generator not found: $csv_generator"
+        log_warn "CSV generator not found: $csv_generator"
         return 0
     fi
 
     if [ ! -f "$config_file" ]; then
-        logWithLevel "$WARNING" "Config file not found, skipping CSV generation"
+        log_warn "Config file not found, skipping CSV generation"
         return 0
     fi
 
@@ -342,7 +339,7 @@ generate_mastercard_csv() {
     fi
 
     if [ $? -ne 0 ]; then
-        logWithLevel "$WARNING" "CSV generation failed (see /tmp/mastercard-csv-gen.log)"
+        log_warn "CSV generation failed (see /tmp/mastercard-csv-gen.log)"
     fi
 }
 
@@ -359,7 +356,7 @@ verify_deployment() {
         echo ""
         echo "    Custom Resource:"
         run_as_user "kubectl get mastercardcbsconnector -n $MASTERCARD_NAMESPACE" || \
-            logWithLevel "$WARNING" "CR not found"
+            log_warn "CR not found"
         echo ""
         echo "    Pods:"
         run_as_user "kubectl get pods -n $MASTERCARD_NAMESPACE"
@@ -370,8 +367,6 @@ verify_deployment() {
 }
 
 cleanup() {
-    echo "==> Cleaning up Mastercard CBS deployment"
-
     MASTERCARD_NAMESPACE="${MASTERCARD_NAMESPACE:-mastercard-demo}"
     local operator_dir="${RUN_DIR:-$HOME/mifos-gazelle}/src/deployer/operators/mastercard"
 
@@ -385,39 +380,52 @@ cleanup() {
     fi
 
     run_as_user "kubectl delete namespace \"$MASTERCARD_NAMESPACE\" --ignore-not-found=true" > /dev/null 2>&1
-    echo "    Cleanup complete"
 }
 
 deploy_mastercard() {
-    echo "==> Deploying Mastercard CBS"
+    log_section "Deploying Mastercard CBS"
     check_prerequisites
-    echo "    Namespace: $MASTERCARD_NAMESPACE"
+    logWithVerboseCheck "$debug" "$DEBUG" "Namespace: $MASTERCARD_NAMESPACE"
+
+    log_step "Creating namespace $MASTERCARD_NAMESPACE"
     create_namespace
+    log_ok
+
+    log_step "Creating secrets"
     create_secrets
-    echo "    Deploying operator"
+    log_ok
+
+    log_step "Deploying operator"
     deploy_operator
+    log_ok
+
     sleep 5
-    echo "    Deploying connector CR"
+
+    log_step "Deploying connector CR"
     deploy_connector
+    log_ok
+
     wait_for_deployment
-    echo "    Deploying BPMN workflow"
+
+    log_step "Deploying BPMN workflow"
     deploy_bpmn_workflow
-    echo "    Loading supplementary data"
+    log_ok
+
+    log_step "Loading supplementary data"
     load_supplementary_data
-    echo "    Generating sample CSV (6 rows)"
+    log_ok
+
+    log_step "Generating sample CSV (6 rows)"
     generate_mastercard_csv
+    log_ok
+
     configure_payment_mode
     verify_deployment
 
-    echo -e "\n${GREEN}    =================================="
-    echo -e "    Mastercard CBS Deployed"
-    echo -e "    ==================================${RESET}\n"
-
-    echo "    Namespace:  $MASTERCARD_NAMESPACE"
-    echo "    Sample CSV: $RUN_DIR/src/utils/data-loading/bulk-gazelle-mastercard-6.csv"
-    echo "    Submit:     $RUN_DIR/src/utils/data-loading/submit-batch.py -c $CONFIG_FILE_PATH -f $RUN_DIR/src/utils/data-loading/bulk-gazelle-mastercard-6.csv --tenant greenbank"
-    echo "    Verify:     $RUN_DIR/src/utils/mastercard/verify-mastercard-batch.sh -k"
-    echo ""
+    log_banner "Mastercard CBS Deployed"
+    echo "  Namespace:  $MASTERCARD_NAMESPACE"
+    echo "  Sample CSV: $RUN_DIR/src/utils/data-loading/bulk-gazelle-mastercard-6.csv"
+    echo
 }
 
 # Main entry point (only used when script is executed directly, not sourced)
