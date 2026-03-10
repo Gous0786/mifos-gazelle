@@ -41,7 +41,7 @@ function DeployMifosXfromYaml() {
     log_ok
 
     log_step "Restoring MifosX database dump"
-    run_as_user "$UTILS_DIR/dump-restore-fineract-db.sh -r" > /dev/null
+    run_as_user "$DATA_LOADING_DIR/dump-restore-fineract-db.sh -r" > /dev/null
     log_ok
 
     log_step "Applying manifests"
