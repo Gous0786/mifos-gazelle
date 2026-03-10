@@ -41,7 +41,7 @@ function DeployMifosXfromYaml() {
     log_ok
 
     log_step "Restoring MifosX database dump"
-    run_as_user "$UTILS_DIR/dump-restore-fineract-db.sh -r" > /dev/null
+    run_as_user "$DATA_LOADING_DIR/dump-restore-fineract-db.sh -r" > /dev/null
     log_ok
 
     log_step "Applying manifests"
@@ -152,6 +152,7 @@ function generateMifosXandVNextData {
         return 1
       fi
       log_ok
+      generate_sample_csvs
       return 0
     else
       elapsed=$(( $(date +%s) - start_time ))
