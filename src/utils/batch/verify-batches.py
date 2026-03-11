@@ -513,7 +513,7 @@ Prerequisites for GovStack scenarios:
                     parts.append(f"{name}: {succ}/{total}" if total else f"{name}: waiting")
                 line = f"  … [{wall}s/{args.timeout}s] " + "  |  ".join(parts)
                 with _print_lock:
-                    print(f"\r{line}", end="", flush=True)
+                    print(f"\r{line}\033[K", end="", flush=True)
 
     def _poll(sub):
         t0     = time.time()
