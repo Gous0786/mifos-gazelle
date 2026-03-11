@@ -209,7 +209,7 @@ def check_data_loaded(domain, config_path=None, debug=False):
     Returns:
         (ok: bool, issues: list[str], retry_hint: str)
 
-    Non-fatal — the caller decides whether to abort or just warn.
+    Callers should exit on failure — no point submitting batches without data.
     """
     if not _REQUESTS_AVAILABLE:
         return True, [], ""

@@ -443,11 +443,11 @@ Prerequisites for GovStack scenarios:
 
     data_ok, data_issues, data_hint = check_data_loaded(domain, config_path=args.config)
     if not data_ok:
-        print(warn("\nPre-flight warning: MifosX data may not be loaded:"))
+        print(fail(f"\nError: MifosX data is not loaded:"))
         for issue in data_issues:
-            print(warn(f"  • {issue}"))
-        print(warn(data_hint))
-        print()
+            print(f"  • {issue}")
+        print(data_hint)
+        sys.exit(1)
 
     print(bold(f"\nBULK BATCH VERIFICATION — {domain}"))
     print(f"Config: {args.config}  |  {len(args.scenarios)} scenario(s)\n")

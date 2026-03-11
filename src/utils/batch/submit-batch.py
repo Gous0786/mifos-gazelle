@@ -235,11 +235,11 @@ def run_submit(csv_file, config_path, tenant, govstack, registering_institution,
 
     data_ok, data_issues, data_hint = check_data_loaded(domain, config_path=config_path, debug=debug)
     if not data_ok:
-        print(f"\n⚠️  Pre-flight warning: MifosX data may not be loaded:", file=sys.stderr)
+        print(f"\nError: MifosX data is not loaded:", file=sys.stderr)
         for issue in data_issues:
-            print(f"   • {issue}", file=sys.stderr)
+            print(f"  • {issue}", file=sys.stderr)
         print(f"{data_hint}", file=sys.stderr)
-        print(f"   Continuing anyway — submission may fail.\n", file=sys.stderr)
+        sys.exit(1)
 
     if not validate_tenant(tenant):
         return None
