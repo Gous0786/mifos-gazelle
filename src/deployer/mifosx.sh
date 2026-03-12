@@ -146,9 +146,11 @@ function generateMifosXandVNextData {
       fi
 
       log_step "Generating MifosX clients and registering vNext Oracle associations"
-      results=$(run_as_user "$RUN_DIR/src/utils/data-loading/generate-mifos-vnext-data.py -c \"$CONFIG_FILE_PATH\" ")
+      echo
+      run_as_user "python3 \"$RUN_DIR/src/utils/data-loading/generate-mifos-vnext-data.py\" -c \"$CONFIG_FILE_PATH\" 2>&1"
+      local data_gen_exit=$?
 
-      if [[ "$?" -ne 0 ]]; then
+      if [[ $data_gen_exit -ne 0 ]]; then
         log_failed "Data generation failed"
         log_warn "Re-run when the cluster is ready:  $retry_cmd"
         return 1

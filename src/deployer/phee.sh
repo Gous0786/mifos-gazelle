@@ -184,7 +184,7 @@ deploy_bpmns() {
 #------------------------------------------------------------------------------
 generate_sample_csvs() {
     local csv_generator="$RUN_DIR/src/utils/data-loading/generate-example-csv-files.py"
-    local output_dir="$RUN_DIR/src/utils/data-loading"
+    local output_dir="$RUN_DIR/src/utils/batch"
 
     if [ ! -f "$csv_generator" ]; then
             logWithVerboseCheck "$debug" "$WARNING" "CSV generator not found: $csv_generator"

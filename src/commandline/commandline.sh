@@ -202,7 +202,7 @@ function showUsage {
     echo "
     USAGE: $0 [-f <config_file_path>] -m [mode] -u [user] -a [apps] -e [environment] -d [true/false] -r [true/false]
     Example 1 : sudo $0                                          # deploy all apps enabled in config.ini and user \$USER from config.ini
-    Example 2 : sudo $0 -m cleanapps  -d true                    # delete all apps enabled in config.init, leave environment with debug mode \$USER from config.ini
+    Example 2 : sudo $0 -m cleanapps -d true                     # delete all apps enabled in config.init,  debug mode \$USER from config.ini
     Example 3 : sudo $0 -m cleanall                              # delete all apps, all local Kubernetes artifacts, and local kubernetes server
     Example 4 : sudo $0 -a phee                                  # deploy PHEE only, user \$USER from config.ini
     Example 6 : sudo $0 -a \"mifosx,vnext\"                        # deploy MifosX and vNext only 
