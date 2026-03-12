@@ -86,6 +86,10 @@ The INI is organized by sections. Keys below are representative; align with the 
 - [general]
     - GAZELLE_DOMAIN: base domain.
     - GAZELLE_VERSION: documentation/version banner.
+    - logging: write full deployment log to `/tmp/gazelle-YYYYMMDD-HHMM.log` (`true`/`false`).
+    - **startup_timeout**: maximum seconds to wait for pods to be Running and services fully initialised before running post-deploy data generation steps. The main bottleneck is Fineract’s Liquibase migrations on first boot. Default: `600` (10 min). Slow hardware / Raspberry Pi: `1800`. Managed cold-start: `900`.
+- [dockerhub] (optional)
+    - DOCKERHUB_USERNAME, DOCKERHUB_PASSWORD, DOCKERHUB_EMAIL: Docker Hub credentials for authenticated image pulls. Raises anonymous rate limit (100 pulls/6 h) to authenticated limit. Leave commented out to use anonymous pulls. When set, `src/deployer/deployer.sh` creates a `dockerhub-secret` K8s secret in each namespace via `src/utils/k3s-docker-login.sh`.
 - [environment]
     - user: execution username; supports literal $USER which expands at runtime.
 - [infra]
