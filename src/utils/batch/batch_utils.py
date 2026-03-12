@@ -10,6 +10,15 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:
+    import requests
+    requests.packages.urllib3.disable_warnings(
+        requests.packages.urllib3.exceptions.InsecureRequestWarning
+    )
+    _REQUESTS_AVAILABLE = True
+except ImportError:
+    _REQUESTS_AVAILABLE = False
+
 
 # ---------------------------------------------------------------------------
 # Config helpers
@@ -186,6 +195,102 @@ def detect_registering_institution(payee_identifiers, debug=False):
         if debug:
             print(f"Warning: institution detection failed: {e}", file=sys.stderr)
         return None, {}
+
+
+# ---------------------------------------------------------------------------
+# Data-loaded pre-flight check
+# ---------------------------------------------------------------------------
+
+def check_data_loaded(domain, config_path=None, debug=False):
+    """
+    Verify that generate-mifos-vnext-data.py has been run by checking that
+    Fineract has at least one client in each tenant (greenbank, redbank, bluebank).
+
+    Returns:
+        (ok: bool, issues: list[str], retry_hint: str)
+
+    Callers should exit on failure — no point submitting batches without data.
+    """
+    if not _REQUESTS_AVAILABLE:
+        return True, [], ""
+
+    tenants = ['greenbank', 'redbank', 'bluebank']
+    auth = "Basic bWlmb3M6cGFzc3dvcmQ="   # mifos:password
+    base_url = f"https://mifos.{domain}/fineract-provider/api/v1"
+
+    hint = f"  Fix: sudo ./run.sh -a setup-data"
+    if config_path:
+        hint += f" -f {config_path}"
+
+    issues = []
+    for tenant in tenants:
+        try:
+            resp = requests.get(
+                f"{base_url}/clients",
+                headers={"Authorization": auth, "Fineract-Platform-TenantId": tenant},
+                verify=False, timeout=10,
+            )
+            if resp.status_code == 200:
+                total = resp.json().get("totalFilteredRecords", 0)
+                if total == 0:
+                    issues.append(f"tenant '{tenant}': Fineract has no clients")
+                elif debug:
+                    print(f"✓ Data check: tenant '{tenant}' has {total} client(s)", file=sys.stderr)
+            else:
+                issues.append(f"tenant '{tenant}': Fineract returned HTTP {resp.status_code}")
+        except Exception as e:
+            issues.append(f"tenant '{tenant}': could not reach Fineract ({type(e).__name__})")
+
+    return (len(issues) == 0), issues, hint
+
+
+# ---------------------------------------------------------------------------
+# Cluster health checks (used by verify-batches.py to decide whether to
+# keep waiting for in-progress mojaloop batches)
+# ---------------------------------------------------------------------------
+
+def count_zeebe_incidents(domain):
+    """
+    Count unresolved Zeebe incidents via Elasticsearch.
+    Returns int (may be 0) or None if the check could not run.
+    """
+    if not _REQUESTS_AVAILABLE:
+        return None
+    try:
+        resp = requests.post(
+            f"http://elasticsearch.{domain}/zeebe-record_incident_*/_search",
+            json={"size": 0, "query": {"term": {"value.state": "CREATED"}}},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            return resp.json().get("hits", {}).get("total", {}).get("value", 0)
+        return None
+    except Exception:
+        return None
+
+
+def get_k8s_error_pods(namespace="paymenthub"):
+    """
+    Return list of strings describing pods in error state in the given namespace.
+    Returns a list (possibly empty), or None if the check could not run.
+    Error states checked: CrashLoopBackOff, Error, OOMKilled, ImagePullBackOff, ErrImagePull.
+    """
+    error_states = {"Error", "CrashLoopBackOff", "OOMKilled", "ImagePullBackOff", "ErrImagePull"}
+    try:
+        result = subprocess.run(
+            ["kubectl", "get", "pods", "-n", namespace, "--no-headers"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0:
+            return None
+        error_pods = []
+        for line in result.stdout.split("\n"):
+            parts = line.split()
+            if len(parts) >= 3 and parts[2] in error_states:
+                error_pods.append(f"{parts[0]} ({parts[2]})")
+        return error_pods
+    except Exception:
+        return None
 
 
 def check_identity_mapper(registering_institution, debug=False):
