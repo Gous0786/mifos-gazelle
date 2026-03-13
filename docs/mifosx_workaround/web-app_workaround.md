@@ -16,7 +16,7 @@ The following videos demonstrate the workaround for MifoX login issue.
 
 - You will then able to login using mifos/password
 
-- [VIDEO OF WORKAROUND](./Mifos%20Gazelle%202.0%20Safari%20workaround.mov)
+- [VIDEO OF WORKAROUND](https://youtu.be/0wgBJGE4LX4)
 
 <br>
 
@@ -32,7 +32,7 @@ The following videos demonstrate the workaround for MifoX login issue.
 
 - You will then be able to login using mifos/password
 
-- [VIDEO OF WORKAROUND](./Mifos%20Gazelle%202.0%20Chrome%20workaround.mov)
+- [VIDEO OF WORKAROUND](https://youtu.be/n9m8Ihokzfg)
 
 <BR>
 
@@ -49,5 +49,5 @@ The following videos demonstrate the workaround for MifoX login issue.
 
 - You will then be able to login using mifos/password
 
-- [VIDEO OF WORKAROUND](./Mifos%20Gazelle%202.0%20MifosX%20workaround_firefox.mov)
+- [VIDEO OF WORKAROUND](https://youtu.be/CZUXIFbVHVQ)
 
