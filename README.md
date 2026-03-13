@@ -1,18 +1,26 @@
 # Mifos Gazelle
 [![Mifos](https://img.shields.io/badge/Mifos-Gazelle-blue)](https://github.com/openMF/mifos-gazelle)
 
-> Mifos Gazelle is a Mifos Digital Public Infrastructure as a Solution (DaaS) deployment tool v1.1.0 — July 2025.
+> Mifos Gazelle is a Mifos Digital Public Infrastructure as a Solution (DaaS) deployment tool v2.0.0 — March 2026.
 > Deploys MifosX (core banking), Payment Hub EE (payment orchestration), and Mojaloop vNext Beta1 (payment switch) on Kubernetes with a single command.
 
 ## Quick Start
 
+Latest Stable Release:
 ```bash
-git clone --branch master https://github.com/openMF/mifos-gazelle.git
+git clone --branch main https://github.com/openMF/mifos-gazelle.git
 cd mifos-gazelle
 sudo ./run.sh -u $USER -m deploy -a all
 ```
 
 See [Deployment Guide](docs/MIFOS-GAZELLE-README.md) for prerequisites and full instructions.
+
+For Latest Development Release (May not be stable):
+```bash
+git clone --branch dev https://github.com/openMF/mifos-gazelle.git
+cd mifos-gazelle
+sudo ./run.sh -u $USER -m deploy -a all
+```
 
 ## Documentation
 
@@ -39,4 +47,5 @@ See [Deployment Guide](docs/MIFOS-GAZELLE-README.md) for prerequisites and full 
 - [Contributing Guidelines](CONTRIBUTING.md)
 - [License Information](LICENSE.md)
 - [Architecture](ARCHITECTURE.md)
-- [Mifos Slack](https://mifos.slack.com) — join the `#mifos-gazelle` channel
+- [Mifos Slack for Release](https://mifos.slack.com) — join the `#mifos-gazelle` channel
+- [Mifos Slack for Development](https://mifos.slack.com) — join the `#mifos-gazelle-dev` channel
