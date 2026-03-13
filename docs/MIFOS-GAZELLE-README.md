@@ -2,7 +2,7 @@
 
 [![Mifos](https://img.shields.io/badge/Mifos-Gazelle-blue)](https://github.com/openMF/mifos-gazelle)
 
-> Mifos Gazelle v1.1.0 — July 2025. Deploys MifosX, Payment Hub EE, and Mojaloop vNext Beta1 on Kubernetes.
+> Mifos Gazelle v2.0.0 — March 2026. Deploys MifosX, Payment Hub EE, and Mojaloop vNext Beta1 on Kubernetes.
 
 ## Table of Contents
 - [Goal](#goal-of-mifos-gazelle)
@@ -31,7 +31,7 @@
 
 Mifos Gazelle provides a trivially simple installation and configuration mechanism for a Digital Public Goods DaaS construct — initially MifosX (core banking), Payment Hub EE (payment orchestration), and Mojaloop vNext Beta1 (payment switch). The goal is a rapidly deployable showcase and lab environment that others can build on.
 
-> **IMPORTANT:** v1.1.0 is recommended for development, test, and demonstration only. Security hardening has not yet occurred.
+> **IMPORTANT:** v2.0.0 is recommended for development, test, and demonstration only. Security hardening has not yet occurred.
 
 ---
 
@@ -49,8 +49,8 @@ Mifos Gazelle provides a trivially simple installation and configuration mechani
 ## Prerequisites
 
 - Ubuntu 22.04 or 24.04 LTS (x86_64 or ARM64)
-- 24 GB RAM minimum (less if deploying individual components)
-- 30 GB+ free space in home directory
+- 16 GB RAM minimum (less if deploying individual components)
+- 40 GB+ free space in home directory
 - Non-root user with sudo privileges
 
 ---
@@ -59,7 +59,7 @@ Mifos Gazelle provides a trivially simple installation and configuration mechani
 
 ```bash
 cd $HOME
-git clone --branch master https://github.com/openMF/mifos-gazelle.git
+git clone --branch main https://github.com/openMF/mifos-gazelle.git
 cd mifos-gazelle
 sudo ./run.sh -u $USER -m deploy -a all
 ```
@@ -138,7 +138,8 @@ To view the resulting transaction history across all tenants:
 - **Zeebe Operate** at https://zeebe-operate.mifos.gazelle.test (login: demo/demo) → Dashboard → PayerFundTransfer-greenbank → see the BPMN execution path (blue line)
 - **Payment Hub Operations Web** at https://ops.mifos.gazelle.test → paymenthub → transfers
 - **vNext Admin UI** at https://vnextadmin.mifos.gazelle.test (login: admin/superMegaPass) → quotes and transfers
-- **MifosX** at http://mifos.mifos.gazelle.test (login: mifos/password, tenant: greenbank or bluebank) → institution → clients → account → transactions (payer starts at $5000)
+- **MifosX** at https://mifos.mifos.gazelle.test (login: mifos/password, tenant: greenbank or bluebank) → institution → clients → account → transactions (payer starts at $5000). See [known issues](#known-issues) for workarounds if issues with login
+
 
 ---
 
@@ -179,7 +180,7 @@ Add the following to your **local** `/etc/hosts` (or Windows `C:\Windows\System3
 <VM-IP> fineract.mifos.gazelle.test
 ```
 
-Login at http://mifos.mifos.gazelle.test with user `mifos` / password `password`. Select tenant: `default`, `greenbank`, or `bluebank`.
+Login at https://mifos.mifos.gazelle.test with user `mifos` / password `password`. Select tenant: `default`, `greenbank`, or `bluebank`.
 
 ### vNext
 
@@ -321,21 +322,23 @@ kubectl logs -n paymenthub ph-ee-integration-test-gazelle
 > Limitations below are those of the Mifos Gazelle configuration, not of the underlying DPGs.
 
 - Operations-Web UI can display transfers; bulk transfer UI work is ongoing
-- Payment Hub EE v1.13.0 deployed; integration test image tag `v1.6.2-gazelle`
+- Payment Hub EE v2.0.0 beta deployed; integration test image tag `v1.6.2-gazelle`
 - ARM64 supported for all 3 DPGs; Raspberry Pi 4 has a MongoDB limitation (requires ARMv8.2A)
-- Memory reduction is a high priority (target: all 3 DPGs on 16GB)
+- Memory reduction remains a high priority (however we can now consitently deploy )
 - Kubernetes operator work (openMF/mifos-operators) planned for a future release
 
 ---
 
 ## Known Issues
 
-- On 24GB systems, occasional pod OOM events require a pod restart or re-run
+- On 16GB systems, occasional pod OOM events require a pod restart or re-run
 - Single-node only (no technical barrier; just not yet tested multi-node)
 - Operations-Web integration pending (ph-ee-operations-web PRs #98, #99)
 - Postman collections not yet fully adapted to Gazelle environment
 - Some issues on older Intel/Opteron hardware with nginx, MongoDB, and ElasticSearch
 - **Security:** the deployment is not hardened — use for dev/test/demo only
+- MifosX Web-app requires to be called in https:// in chrome firefox or safari otherwise login will not work and username/password issue will be highlighted [issue](https://mifosforge.jira.com/browse/GAZ-260).  The first time you go to the https://mifos.mifos.gazelle.test you will get a security warning you will need to accept the risk. Then when you try to login it will be accepted. [workaround instructions](./mifosx_workaround/web-app_workaround.md)
+- MifosX Web-app Edge and other browsers have not been tested.
 
 ---
 
@@ -377,11 +380,16 @@ kubectl logs -n infra -l app=mysql --tail=50
 
 Ensure the `/etc/hosts` entries (or Windows hosts file) are set on the machine where your **browser** runs, pointing to the Gazelle server IP. See [Accessing Deployed Applications](#accessing-deployed-applications-dpgs).
 
----
+### MifosX Login issue
 
+If you experience login issues for MifosX UI please refer to these [workaround instructions](./mifosx_workaround/web-app_workaround.md)
+
+<br>
+
+---
 ## Version Information
 
-- [Release Notes v1.1.0](./RELEASE-NOTES.md)
+- [Release Notes v2.0.0](./RELEASE-NOTES.md)
 - Payment Hub EE: v1.13.0 (https://mifos.gitbook.io/docs/payment-hub-ee/release-notes/v1.13.0)
 - Mojaloop vNext: Beta1
-- MifosX (Apache Fineract): v1.11.0 (gazelle-1.2.0 branch)
+- MifosX: v 250621 including Apache Fineract v1.11.0 
