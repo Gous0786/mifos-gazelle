@@ -25,6 +25,7 @@ import time
 import argparse
 import requests
 import urllib3
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -43,11 +44,14 @@ def _load_module(name, path):
 _utils = _load_module("batch_utils", _SCRIPT_DIR / "batch_utils.py")
 _submit = _load_module("submit_batch", _SCRIPT_DIR / "submit-batch.py")
 
-load_config        = _utils.load_config
-get_gazelle_domain = _utils.get_gazelle_domain
-FALLBACK_TENANTS   = _utils.FALLBACK_TENANTS
-run_submit         = _submit.run_submit
-DEFAULT_SECRET_KEY = _submit.DEFAULT_SECRET_KEY
+load_config           = _utils.load_config
+get_gazelle_domain    = _utils.get_gazelle_domain
+FALLBACK_TENANTS      = _utils.FALLBACK_TENANTS
+check_data_loaded     = _utils.check_data_loaded
+count_zeebe_incidents = _utils.count_zeebe_incidents
+get_k8s_error_pods    = _utils.get_k8s_error_pods
+run_submit            = _submit.run_submit
+DEFAULT_SECRET_KEY    = _submit.DEFAULT_SECRET_KEY
 
 # ---------------------------------------------------------------------------
 # Paths / constants
@@ -58,10 +62,11 @@ CLOSEDLOOP_CSV = _SCRIPT_DIR / "bulk-gazelle-closedloop-4.csv"
 
 SCENARIOS = [
     {
-        "name":     "Mojaloop / Non-GovStack",
-        "csv":      MOJALOOP_CSV,
-        "tenant":   "greenbank",
-        "govstack": False,
+        "name":          "Mojaloop / Non-GovStack",
+        "csv":           MOJALOOP_CSV,
+        "tenant":        "greenbank",
+        "govstack":      False,
+        "stall_timeout": 180,   # mojaloop through vNext switch takes longer
     },
     {
         "name":     "Closedloop / Non-GovStack",
@@ -70,10 +75,11 @@ SCENARIOS = [
         "govstack": False,
     },
     {
-        "name":     "Mojaloop / GovStack",
-        "csv":      MOJALOOP_CSV,
-        "tenant":   "greenbank",
-        "govstack": True,
+        "name":          "Mojaloop / GovStack",
+        "csv":           MOJALOOP_CSV,
+        "tenant":        "greenbank",
+        "govstack":      True,
+        "stall_timeout": 180,
     },
     {
         "name":     "Closedloop / GovStack",
@@ -175,18 +181,22 @@ def fetch_batch_transfers(domain, batch_id, tenant, page_size=20):
 # Polling
 # ---------------------------------------------------------------------------
 
-def wait_for_batch(domain, batch_id, tenant, timeout=300, poll_interval=5, stall_timeout=90):
+def wait_for_batch(domain, batch_id, tenant, timeout=600, poll_interval=5, stall_timeout=120,
+                   on_progress=None):
     """
-    Smart polling — stops when ongoing==0, stalled, or hard timeout reached.
-    Progress (successful count increasing) resets the stall timer.
+    Poll until ongoing==0, hard timeout, or stall with cluster errors.
+    on_progress(successful, total) called each poll when summary is available.
+    On stall: checks Zeebe incidents + K8s pod errors; resets timer if healthy.
     """
     hard_deadline    = time.time() + timeout
+    batch_start      = time.time()
     last_successful  = -1
     last_progress_at = time.time()
     last             = None
 
     while True:
         now     = time.time()
+        elapsed = int(now - batch_start)
         summary = fetch_batch_summary(domain, batch_id, tenant)
 
         if summary is not None:
@@ -195,22 +205,40 @@ def wait_for_batch(domain, batch_id, tenant, timeout=300, poll_interval=5, stall
             ongoing    = summary.get("ongoing",    -1)
             successful = summary.get("successful", 0)
 
+            if on_progress:
+                on_progress(successful, total)
+
             if total > 0 and ongoing == 0:
                 return last
 
             if successful > last_successful:
                 last_progress_at = now
                 last_successful  = successful
-                print(f"\r    progress: {successful}/{total} completed, {ongoing} ongoing …",
-                      end="", flush=True)
 
-        stalled   = (now - last_progress_at) > stall_timeout
         timed_out = now >= hard_deadline
+        stalled   = (now - last_progress_at) > stall_timeout
 
-        if stalled or timed_out:
-            reason = "stalled (no progress)" if stalled else f"hard timeout ({timeout}s)"
-            print(f"\r    stopped waiting: {reason}                          ")
+        if timed_out:
             break
+
+        if stalled:
+            incidents  = count_zeebe_incidents(domain)
+            error_pods = get_k8s_error_pods()
+
+            zeebe_ok = incidents is not None and incidents == 0
+            k8s_ok   = error_pods is not None and len(error_pods) == 0
+
+            if not zeebe_ok or not k8s_ok:
+                print(warn(f"    stopped: stalled after {elapsed}s with errors detected"))
+                if incidents and incidents > 0:
+                    print(warn(f"    Zeebe: {incidents} active incident(s)"))
+                if error_pods:
+                    for p in error_pods:
+                        print(warn(f"    Pod error: {p}"))
+                break
+
+            # System is healthy — reset stall timer and keep waiting silently
+            last_progress_at = now
 
         time.sleep(poll_interval)
 
@@ -381,10 +409,10 @@ Prerequisites for GovStack scenarios:
     )
     parser.add_argument("-c", "--config", type=lambda p: Path(p).expanduser(), default=DEFAULT_CFG,
                         help=f"Path to config.ini (default: {DEFAULT_CFG})")
-    parser.add_argument("--timeout", type=int, default=300,
-                        help="Hard max seconds to wait per batch (default: 300)")
-    parser.add_argument("--stall-timeout", type=int, default=90,
-                        help="Stop waiting if no progress for N seconds (default: 90)")
+    parser.add_argument("--timeout", type=int, default=600,
+                        help="Hard max seconds to wait per batch (default: 600)")
+    parser.add_argument("--stall-timeout", type=int, default=120,
+                        help="Base stall timeout in seconds; mojaloop scenarios use 180s (default: 120)")
     parser.add_argument("--poll-interval", type=int, default=5,
                         help="Polling interval in seconds (default: 5)")
     parser.add_argument("--no-transfers", action="store_true",
@@ -412,6 +440,14 @@ Prerequisites for GovStack scenarios:
 
     cfg    = load_config(args.config)
     domain = get_gazelle_domain(cfg)
+
+    data_ok, data_issues, data_hint = check_data_loaded(domain, config_path=args.config)
+    if not data_ok:
+        print(fail(f"\nError: MifosX data is not loaded:"))
+        for issue in data_issues:
+            print(f"  • {issue}")
+        print(data_hint)
+        sys.exit(1)
 
     print(bold(f"\nBULK BATCH VERIFICATION — {domain}"))
     print(f"Config: {args.config}  |  {len(args.scenarios)} scenario(s)\n")
@@ -445,31 +481,112 @@ Prerequisites for GovStack scenarios:
             "submitted": ok_flag and batch_id is not None,
         })
 
-    print(bold("\nWaiting for results…\n"))
-    results = []
+    pending = [s for s in submissions if s["submitted"]]
+    skipped = [s for s in submissions if not s["submitted"]]
 
+    print(bold(f"\nWaiting for {len(pending)} batch(es)…\n"))
+    for sub in skipped:
+        print(warn(f"  {sub['scenario']['name']}: skipped (not submitted)"))
+
+    # Poll all submitted batches in parallel; print a line as each completes.
+    import threading
+    result_map  = {}                         # batch_id → {summary, elapsed}
+    _print_lock = threading.Lock()
+    _progress   = {}                         # batch_id → (name, successful, total, elapsed)
+    _stop_prog  = threading.Event()
+
+    def _print_result(msg):
+        """Clear the progress line then print a completion line."""
+        with _print_lock:
+            print(f"\r\033[2K{msg}", flush=True)
+
+    _wall_start = time.time()
+
+    def _progress_thread():
+        """Background thread: redraws the in-flight status line every 2s."""
+        while not _stop_prog.wait(timeout=2):
+            in_flight = list(_progress.values())
+            if in_flight:
+                wall = int(time.time() - _wall_start)
+                parts = []
+                for name, succ, total, _ in in_flight:
+                    parts.append(f"{name}: {succ}/{total}" if total else f"{name}: waiting")
+                line = f"  … [{wall}s/{args.timeout}s] " + "  |  ".join(parts)
+                with _print_lock:
+                    print(f"\r{line}\033[K", end="", flush=True)
+
+    def _poll(sub):
+        t0     = time.time()
+        name   = sub["scenario"]["name"]
+        bid    = sub["batch_id"]
+        tenant = sub["scenario"]["tenant"]
+        stall  = sub["scenario"].get("stall_timeout", args.stall_timeout)
+
+        _progress[bid] = (name, 0, None, 0)   # visible immediately, total=None until first poll
+
+        def _on_progress(successful, total):
+            if total > 0:
+                _progress[bid] = (name, successful, total, int(time.time() - t0))
+
+        summary = wait_for_batch(
+            domain, bid, tenant,
+            timeout=args.timeout, poll_interval=args.poll_interval,
+            stall_timeout=stall, on_progress=_on_progress,
+        )
+        return sub, summary, time.time() - t0
+
+    prog_t = threading.Thread(target=_progress_thread, daemon=True)
+    prog_t.start()
+
+    with ThreadPoolExecutor(max_workers=max(len(pending), 1)) as ex:
+        futures = {ex.submit(_poll, sub): sub for sub in pending}
+        for future in as_completed(futures):
+            try:
+                sub, summary, elapsed = future.result()
+            except Exception as e:
+                sub      = futures[future]
+                name     = sub["scenario"]["name"]
+                batch_id = sub["batch_id"]
+                _progress.pop(batch_id, None)
+                _print_result(f"  {RED}✗{RESET} {name:<38} ERROR: {e}")
+                result_map[batch_id] = {"summary": None, "elapsed": 0}
+                continue
+
+            name     = sub["scenario"]["name"]
+            batch_id = sub["batch_id"]
+            s        = summary or {}
+            total    = s.get("total",      0)
+            succ     = s.get("successful", 0)
+            status   = s.get("status",     "?")
+            marker   = f"{GREEN}✓{RESET}" if succ == total and total > 0 else f"{RED}✗{RESET}"
+            _progress.pop(batch_id, None)
+            _print_result(f"  {marker} {name:<38} {succ}/{total} ok  ({elapsed:.0f}s)  [{status}]")
+            result_map[batch_id] = {"summary": summary, "elapsed": elapsed}
+
+    _stop_prog.set()
+    prog_t.join()
+    with _print_lock:
+        print("\r\033[2K", end="", flush=True)   # clear any leftover progress line
+
+    # Print full details in original submission order.
+    results = []
+    print()
     for sub in submissions:
         scenario = sub["scenario"]
         batch_id = sub["batch_id"]
 
         if not sub["submitted"]:
-            print(warn(f"  {scenario['name']}: skipped (not submitted)"))
             results.append({
                 "name": scenario["name"], "submitted": False,
                 "batch_id": None, "summary": None, "elapsed": 0,
             })
             continue
 
-        print(f"  {scenario['name']}  [{batch_id}]")
-        t0 = time.time()
-        summary = wait_for_batch(
-            domain, batch_id, scenario["tenant"],
-            timeout=args.timeout, poll_interval=args.poll_interval,
-            stall_timeout=args.stall_timeout,
-        )
-        elapsed = time.time() - t0
-        print()
+        r       = result_map.get(batch_id, {})
+        summary = r.get("summary")
+        elapsed = r.get("elapsed", 0)
 
+        print(f"\n  {bold(scenario['name'])}  [{batch_id}]")
         print_batch_result(summary, elapsed)
 
         if not args.no_transfers:
