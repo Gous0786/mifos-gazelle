@@ -286,7 +286,7 @@ function print_deployment_end_message() {
 
   log_banner "Mifos Gazelle Ready"
   echo
-  echo "  MifosX:        http://mifos.${GAZELLE_DOMAIN}"
+  echo "  MifosX:        https://mifos.${GAZELLE_DOMAIN}"
   echo "  vNext Admin:   http://vnextadmin.${GAZELLE_DOMAIN}"
   echo "  Ops Web:       http://ops.${GAZELLE_DOMAIN}"
   echo "  Zeebe Operate: http://zeebe-operate.${GAZELLE_DOMAIN}"
