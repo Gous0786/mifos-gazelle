@@ -361,7 +361,7 @@ This is expected. During batch processing, individual transfer records pass thro
 
 The database is always the authoritative source:
 ```bash
-kubectl exec -n paymenthub operationsmysql-0 -- env MYSQL_PWD=ethieTieCh8ahv mysql -uroot operations_app \
+kubectl exec -n paymenthub operationsmysql-0 -- env MYSQL_PWD=ethieTieCh8ahv mysql -uroot tenants \
   -e "SELECT batch_id, total_transactions, completed, status FROM batches ORDER BY id DESC LIMIT 5\G"
 ```
 

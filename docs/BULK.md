@@ -27,7 +27,7 @@ Submits a single CSV to the bulk-processor.
 ./submit-batch.py   # interactive — prompts for CSV, tenant, GovStack mode, etc.
 ```
 
-Key flags: `-c config.ini`, `-f csv`, `-t tenant`, `-g` (GovStack), `--debug`, `--show-curl`
+Key flags: `-c config.ini`, `-f csv`, `-t tenant`, `-g` (GovStack), `-i registering-institution`, `-p program`, `--debug`, `--show-curl`
 
 ### `src/utils/batch/verify-batches.py`
 Submits all 4 standard scenarios and polls operations-app until complete, then prints a pass/fail summary.
@@ -104,7 +104,7 @@ This is expected. Individual transfer records go through intermediate states dur
 
 To check the authoritative batch result from the database:
 ```bash
-kubectl exec -n paymenthub operationsmysql-0 -- env MYSQL_PWD=ethieTieCh8ahv mysql -uroot operations_app \
+kubectl exec -n paymenthub operationsmysql-0 -- env MYSQL_PWD=ethieTieCh8ahv mysql -uroot tenants \
   -e "SELECT batch_id, total_transactions, completed, status, completed_at FROM batches ORDER BY id DESC LIMIT 5\G"
 ```
 
