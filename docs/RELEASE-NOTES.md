@@ -4,7 +4,7 @@
 
 - **Raspberry Pi Support** - Full and stable Raspberry Pi deployment onto a Pi5 16GB with all components deployed
 - **Payment Hub v2.0.0 preview** - Extensive Updates to Payment Hub EE with a pre-release view, including upgraded UI, tested workflows, GovStack support
-- **config.ini** - Config.ini supported to add configurations to deployments and enable demo setups. [Config File Support](CONFIG-FILE-SUPPORT.md)
+- **config.ini** - Config.ini supported to add configurations to deployments and enable demo setups
 - **Reduced Memory Utilization** - All components now require less than 16GB memory
 - **Data Prepopulation** - for MifosX and PaymentHub EE and VNext to allow for demos
 - **Mastercard CBS Connector Demo** - A demo version of the Mastercard CBS Connector which can be configured to connect to the Mastercard Sandbox instance

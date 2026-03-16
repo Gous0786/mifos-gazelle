@@ -27,7 +27,6 @@ sudo ./run.sh -u $USER -m deploy -a all
 | Guide | Contents |
 |-------|----------|
 | [Deployment Guide](docs/MIFOS-GAZELLE-README.md) | Install, configure, test end-to-end payments, FAQ |
-| [Config File](docs/CONFIG-FILE-SUPPORT.md) | `config.ini` schema, `startup_timeout`, DockerHub auth |
 | [Bulk Payment Tools](docs/BULK.md) | Submit/verify G2P batch payments, GovStack mode |
 | [GovStack Architecture](docs/GOVSTACK.md) | G2P bulk disbursement design and troubleshooting |
 | [Local Development](docs/LOCALDEV.md) | hostPath mounts for iterating on Payment Hub EE code |

@@ -81,6 +81,8 @@ The deployment takes 10–20 minutes.  See [Deployment times out](#deployment-ti
 | `-r` | Force redeploy | `true`, `false` | `true` |
 | `-h` | Show help | — | — |
 
+`config/config.ini` is the central configuration file — it controls namespaces, repo branches, domains, and which components are enabled. Use `-f` to point to an alternative file (e.g. for per-environment variants). The file is self-documenting; all keys have inline comments.
+
 ---
 
 ## What to Do Next
@@ -293,9 +295,9 @@ Mifos Gazelle deploys four default tenants: `default`, `greenbank`, `bluebank` a
 > Limitations below are those of the Mifos Gazelle configuration, not of the underlying DPGs.
 
 - Operations-Web UI has been vastly improved but is still WIP
-- Payment Hub EE v2.0.0 is deployed 
-- ARM64 supported for all 3 DPGs; Raspberry Pi 4 has a MongoDB limitation (requires ARMv8.2A) but Pi 5 is well tested now and workd well. 
-- Memory reduction is still wip but 16GB works fine for all 3 DPGs on a single node.
+- Payment Hub EE mifos-v2.0.0 is deployed which is a branch that builds on v1.13.3 release and is reflected in the mifos-v2.0.0 branches of the Paymenthub EE repositories deployed by mifos-gazelle 
+- ARM64 supported for all 3 DPGs; Raspberry Pi 4 has a MongoDB limitation (requires ARMv8.2A) but Pi 5 is well tested now and works well for P2P payments i.e. make-payment.sh. 
+- Memory reduction is still wip but 16GB generally works fine for all 3 DPGs on a single node.
 - Kubernetes operator work (openMF/mifos-operators) still planned for a future release
 ---
 
