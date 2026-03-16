@@ -11,15 +11,15 @@
 - [Quick Start](#quick-start)
 - [Deployment Options](#deployment-options)
 - [What to Do Next](#what-to-do-next)
-- [Test a Payment](#execute-a-transfer-from-greenbank-to-bluebank)
+  - [Deployed Web Consoles](#deployed-web-consoles)
+  - [Test a Payment](#execute-a-transfer-from-greenbank-to-bluebank)
+  - [Test Bulk Processing](#bulk-processing)
 - [Application Deployment Modes](#application-deployment-modes)
 - [Cleanup](#cleanup)
 - [Accessing Deployed Applications](#accessing-deployed-applications-dpgs)
-- [DockerHub Authentication](#dockerhub-authentication)
 - [Kibana Dashboards](#kibana-dashboards)
 - [Demo Tools](#demo-tools)
 - [Adding Tenants to MifosX](#adding-tenants-to-mifosx)
-- [Helm Test](#helm-test)
 - [Development Status](#development-status)
 - [Known Issues](#known-issues)
 - [FAQ](#faq)
@@ -29,7 +29,7 @@
 
 ## Goal of Mifos Gazelle
 
-Mifos Gazelle provides a trivially simple kubernetes based installation for cloud native Digital Public Goods (DPGs) — initially MifosX (core banking), Payment Hub EE (payment orchestration), and Mojaloop vNext Beta1 (payment switch). The goal is a rapidly deployable showcase and lab environment that others can build on.
+Mifos Gazelle provides a very simple kubernetes based installation for cloud native Digital Public Goods (DPGs) — initially MifosX (core banking), Payment Hub EE (payment orchestration), and Mojaloop vNext Beta1 (payment switch). The goal is a rapidly deployable showcase and lab environment that others can build on.
 
 > **IMPORTANT:** v2.0.0 is recommended for development, test, and demonstration only. Security hardening has not yet occurred, so it is NOT currently production ready. 
 
@@ -37,7 +37,7 @@ Mifos Gazelle provides a trivially simple kubernetes based installation for clou
 
 ## Mifos Gazelle Features
 
-- Installs each or all 3 DPGs in a reliable, repeatable and integrated way
+- Installs each or all 3 DPGs in a reliable, repeatable and integrated way with demonstration data generated and loaded so that end to end testing of transactions is immediately available after deployment. 
 - Bash scripts designed to be readable and modifiable
 - Full installation in ~15 minutes on capable hardware
 - Fully functioning MifosX with multi-tenant support
@@ -64,59 +64,72 @@ cd mifos-gazelle
 sudo ./run.sh -u $USER -m deploy -a all
 ```
 
-The deployment takes 10–20 minutes.  See [startup_timeout](#startup_timeout) if deployments time out on slower hardware.
+The deployment takes 10–20 minutes.  See [Deployment times out](#deployment-times-out-waiting-for-pods) in the FAQ if deployments time out on slower hardware.
 
 ---
 
 ## Deployment Options
 
-| Flag | Description | Values |
-|------|-------------|--------|
-| `-h` | Help | — |
-| `-u` | Non-root user | `$USER` |
-| `-m` | Mode | `deploy`, `cleanapps`, `cleanall` |
-| `-d` | Verbose output | `true`, `false` |
-| `-a` | Components to deploy | `all`, `vnext`, `mifosx`, `phee` |
-| `-f` | Config file | path to `.ini` (default: `config/config.ini`) |
+| Flag | Description | Values | Default |
+|------|-------------|--------|---------|
+| `-f` | Config file path | path to `.ini` | `config/config.ini` |
+| `-m` | Mode (required) | `deploy`, `cleanapps`, `cleanall` | — |
+| `-u` | Non-root user (required) | `$USER` | — |
+| `-a` | Components to deploy | `all`, `infra`, `vnext`, `phee`, `mifosx`, `mastercard-demo`, `setup-data` | `all` |
+| `-e` | Cluster environment | `local`, `remote` | `local` |
+| `-d` | Debug output | `true`, `false` | `false` |
+| `-r` | Force redeploy | `true`, `false` | `true` |
+| `-h` | Show help | — | — |
 
 ---
 
 ## What to Do Next
 
-Once `kubectl get pods -A` shows all pods running:
+Once `kubectl get pods -A` or `~/local/bin/k9s` shows all pods running:
 
-- Start k9s: `~/local/bin/k9s`
-- Inspect MifosX DB: `~/mifos-gazelle/src/utils/mysql-client-mifos.sh`
-- Browse to deployed apps: http://mifos.mifos.gazelle.test, http://vnextadmin.mifos.gazelle.test, http://ops.mifos.gazelle.test
-- DPG documentation:
-  - vNext: https://github.com/mojaloop/platform-shared-tools/blob/main/packages/deployment/docker-compose-apps/README.md
-  - MifosX: https://docs.mifos.org/core-banking-and-embedded-finance/core-banking
-  - Payment Hub EE: https://mifos.gitbook.io/docs/payment-hub-ee/business-overview/vision
-- Join the `#mifos-gazelle` channel on [Mifos Slack](https://mifos.slack.com)
+1. **[Browse the web consoles](#deployed-web-consoles)** — MifosX, Operations Web, Zeebe Operate, MinIO, Kibana, vNext Admin
+2. **[Run a test payment](#execute-a-transfer-from-greenbank-to-bluebank)** — send funds from Greenbank to Bluebank via the vNext switch
+3. **[Test bulk processing](./BULK.md)** — submit a G2P bulk disbursement batch
+4. **[Read the DPG docs](#dpg-documentation)** — upstream documentation for each component
 
-### startup_timeout
+---
 
-MifosX runs Liquibase database migrations on first boot, which can take several minutes. The `startup_timeout` setting in `config/config.ini` controls how long the deployment waits before running post-deploy data generation steps.
+### Deployed Web Consoles
 
-```ini
-[general]
-startup_timeout = 600   # 10 min — default for modern hardware
-# startup_timeout = 1800  # 30 min — use for Raspberry Pi or slow disks
-```
+> All URLs use the default domain `mifos.gazelle.test`. Ensure your browser machine has the correct `/etc/hosts` entries — see [Accessing Deployed Applications](#accessing-deployed-applications-dpgs).
 
-**To check MifosX pod status during startup:**
-```bash
-# Watch pod states
-kubectl get pods -n mifosx -w
+**MifosX**
 
-# Follow Fineract startup logs (Liquibase migration progress)
-kubectl logs -n mifosx -l app=fineract-server --tail=100 -f
+| Console | URL | Login |
+|---------|-----|-------|
+| MifosX Web Client | https://mifos.mifos.gazelle.test | mifos / password (select tenant: `default`, `greenbank`, `bluebank`, `redbank`) |
 
-# Check for errors across the cluster
-./src/utils/k8s-error-summary.py
-```
+**Payment Hub EE**
 
-If you see a timeout error during deployment, increase `startup_timeout` in `config/config.ini` and re-run.
+| Console | URL | Login |
+|---------|-----|-------|
+| Operations Web | https://ops.mifos.gazelle.test | — |
+| Zeebe Operate (BPMN monitor) | https://zeebe-operate.mifos.gazelle.test | demo / demo |
+| MinIO Console (object storage) | https://minio-console.mifos.gazelle.test | root / password |
+| Kibana (payment dashboards) | https://kibana.mifos.gazelle.test | — |
+
+**Mojaloop vNext**
+
+| Console | URL | Login |
+|---------|-----|-------|
+| vNext Admin UI | https://vnextadmin.mifos.gazelle.test | admin / superMegaPass |
+| Redpanda Console (Kafka UI) | https://redpanda-console.mifos.gazelle.test | — |
+| Mongo Express (MongoDB browser) | https://mongoexpress.mifos.gazelle.test | — |
+
+---
+
+### DPG Documentation
+
+- vNext: https://github.com/mojaloop/platform-shared-tools/blob/main/packages/deployment/docker-compose-apps/README.md
+- MifosX: https://docs.mifos.org/core-banking-and-embedded-finance/core-banking
+- Payment Hub EE: https://mifos.gitbook.io/docs/payment-hub-ee/business-overview/vision
+
+Join the `#mifos-gazelle` channel on [Mifos Slack](https://mifos.slack.com)
 
 ---
 
@@ -156,7 +169,7 @@ sudo ./run.sh -u $USER -m deploy -a phee    # Payment Hub EE only
 
 ```bash
 sudo ./run.sh -u $USER -m cleanall           # Remove everything including k3s
-sudo ./run.sh -u $USER -m cleanapps          # Remove all apps, keep k3s
+sudo ./run.sh -u $USER -m cleanapps          # Remove all apps, keep k3s AND IMAGES !
 sudo ./run.sh -u $USER -m cleanapps -a mifosx
 sudo ./run.sh -u $USER -m cleanapps -a phee
 sudo ./run.sh -u $USER -m cleanapps -a vnext
@@ -213,30 +226,6 @@ Login at https://mifos.mifos.gazelle.test with user `mifos` / password `password
 
 ---
 
-## DockerHub Authentication
-
-Docker Hub applies rate limits to anonymous image pulls (100 pulls per 6 hours per IP). If you hit rate limit errors during deployment, authenticate with a Docker Hub account to raise the limit.
-
-**Set credentials in `config/config.ini`:**
-```ini
-[dockerhub]
-DOCKERHUB_USERNAME = your-dockerhub-username
-DOCKERHUB_PASSWORD = your-dockerhub-password
-DOCKERHUB_EMAIL    = your-email@example.com
-```
-
-Alternatively, set environment variables before running:
-```bash
-export DOCKERHUB_USERNAME=your-username
-export DOCKERHUB_PASSWORD=your-password
-export DOCKERHUB_EMAIL=your-email@example.com
-sudo -E ./run.sh -u $USER -m deploy -a all
-```
-
-**How it works:** When creating each Kubernetes namespace, `src/deployer/deployer.sh` calls `src/utils/k3s-docker-login.sh`, which creates a `dockerhub-secret` Kubernetes secret and patches all service accounts in that namespace with `imagePullSecrets`. If credentials are not set, the script exits silently and anonymous pulls are used.
-
----
-
 ## Kibana Dashboards
 
 Payment Hub EE ships with pre-built Kibana visualizations and dashboards for monitoring payment flows.
@@ -290,7 +279,7 @@ Features: split-panel interface (instructions on the left, live DPG iframe on th
 
 ## Adding Tenants to MifosX
 
-Mifos Gazelle deploys three default tenants: `default`, `greenbank`, and `bluebank`.
+Mifos Gazelle deploys four default tenants: `default`, `greenbank`, `bluebank` and `redbank`.
 
 1. Edit `config/mifos-tenant-config.csv` — add your tenant names
 2. Apply: `src/utils/data-loading/update-mifos-tenants.sh -f ./config/mifos-tenant-config.csv`
@@ -299,44 +288,28 @@ Mifos Gazelle deploys three default tenants: `default`, `greenbank`, and `blueba
 
 ---
 
-## Helm Test
-
-Payment Hub EE includes Helm tests (currently ~90% pass rate; reconfiguration ongoing).
-
-```bash
-helm test phee
-kubectl logs -n paymenthub ph-ee-integration-test-gazelle
-
-# Copy test report to /tmp
-~/mifos-gazelle/src/utils/copy-report-from-pod.sh
-# Browse: /tmp/mydir.XXXXXX/tests/test/index.html
-```
-
-> Note: The test pod times out after 90 minutes. Delete it before re-running `helm test phee`.
-
----
-
 ## Development Status
 
 > Limitations below are those of the Mifos Gazelle configuration, not of the underlying DPGs.
 
-- Operations-Web UI can display transfers; bulk transfer UI work is ongoing
-- Payment Hub EE v2.0.0 beta deployed; integration test image tag `v1.6.2-gazelle`
-- ARM64 supported for all 3 DPGs; Raspberry Pi 4 has a MongoDB limitation (requires ARMv8.2A)
-- Memory reduction remains a high priority (however we can now consitently deploy )
-- Kubernetes operator work (openMF/mifos-operators) planned for a future release
-
+- Operations-Web UI has been vastly improved but is still WIP
+- Payment Hub EE v2.0.0 is deployed 
+- ARM64 supported for all 3 DPGs; Raspberry Pi 4 has a MongoDB limitation (requires ARMv8.2A) but Pi 5 is well tested now and workd well. 
+- Memory reduction is still wip but 16GB works fine for all 3 DPGs on a single node.
+- Kubernetes operator work (openMF/mifos-operators) still planned for a future release
 ---
 
 ## Known Issues
 
+- Helm tests (`helm test phee`) have not been updated to reflect the latest Payment Hub EE changes — WIP, expect failures.
+- Docker Hub rate limits (100 pulls/6 hrs per IP for anonymous users) can cause image pull failures — set credentials in `config/config.ini` under `[dockerhub]` to authenticate. See [FAQ](#docker-hub-rate-limit-errors-during-deployment).
 - On 16GB systems, occasional pod OOM events require a pod restart or re-run
 - Single-node only (no technical barrier; just not yet tested multi-node)
-- Operations-Web integration pending (ph-ee-operations-web PRs #98, #99)
+- Operations-Web can show wrong status for batches while the batch is being processed , check the transfers and once they are all done both batch status and totals should be correct
 - Postman collections not yet fully adapted to Gazelle environment
 - Some issues on older Intel/Opteron hardware with nginx, MongoDB, and ElasticSearch
 - **Security:** the deployment is not hardened — use for dev/test/demo only
-- MifosX Web-app requires to be called in https:// in chrome firefox or safari otherwise login will not work and username/password issue will be highlighted [issue](https://mifosforge.jira.com/browse/GAZ-260).  The first time you go to the https://mifos.mifos.gazelle.test you will get a security warning you will need to accept the risk. Then when you try to login it will be accepted. [workaround instructions](./mifosx_workaround/web-app_workaround.md)
+- **MifosX Web-app**  requires to be called in https:// in chrome firefox or safari otherwise login will not work and username/password issue will be highlighted [issue](https://mifosforge.jira.com/browse/GAZ-260).  The first time you go to the https://mifos.mifos.gazelle.test you will get a security warning you will need to accept the risk. Then when you try to login it will be accepted. [workaround instructions](./mifosx_workaround/web-app_workaround.md)
 - MifosX Web-app Edge and other browsers have not been tested.
 
 ---
@@ -345,11 +318,40 @@ kubectl logs -n paymenthub ph-ee-integration-test-gazelle
 
 ### Deployment times out waiting for pods
 
-Increase `startup_timeout` in `config/config.ini` (default 600 s). On Raspberry Pi or slow disks, use 1800. See [startup_timeout](#startup_timeout).
+MifosX runs Liquibase database migrations on first boot, which can take several minutes on slower hardware. Increase `startup_timeout` in `config/config.ini` and re-run:
+
+```ini
+[general]
+startup_timeout = 600   # default — modern hardware
+startup_timeout = 1800  # Raspberry Pi or slow disks
+```
+
+To monitor progress while waiting:
+```bash
+kubectl get pods -n mifosx -w
+kubectl logs -n mifosx -l app=fineract-server --tail=100 -f
+```
 
 ### Docker Hub rate limit errors during deployment
 
-Set DockerHub credentials in `config/config.ini` or as environment variables. See [DockerHub Authentication](#dockerhub-authentication).
+Docker Hub limits anonymous pulls to 100 per 6 hours per IP. Set credentials in `config/config.ini` to authenticate:
+
+```ini
+[dockerhub]
+DOCKERHUB_USERNAME = your-dockerhub-username
+DOCKERHUB_PASSWORD = your-dockerhub-password
+DOCKERHUB_EMAIL    = your-email@example.com
+```
+
+Or pass them as environment variables:
+```bash
+export DOCKERHUB_USERNAME=your-username
+export DOCKERHUB_PASSWORD=your-password
+export DOCKERHUB_EMAIL=your-email@example.com
+sudo -E ./run.sh -u $USER -m deploy -a all
+```
+
+When credentials are set, `src/utils/k3s-docker-login.sh` creates a `dockerhub-secret` in each namespace and patches all service accounts with `imagePullSecrets` automatically.
 
 ### Operations-Web shows "REJECTED" or "null" status during batch processing
 
@@ -378,6 +380,27 @@ kubectl logs -n infra -l app=mysql --tail=50
 ### Cannot reach web UIs in browser
 
 Ensure the `/etc/hosts` entries (or Windows hosts file) are set on the machine where your **browser** runs, pointing to the Gazelle server IP. See [Accessing Deployed Applications](#accessing-deployed-applications-dpgs).
+
+### make-payment.sh fails or returns errors
+
+The test payment script requires that demonstration data (clients, accounts, and vNext oracle registrations) was successfully generated and loaded during deployment. This can silently fail if MifosX was still starting up when the data generation step ran (e.g. Liquibase migration not yet complete).
+
+**Re-run data generation:**
+```bash
+sudo ./run.sh -u $USER -m deploy -a setup-data
+```
+
+This reruns only the data generation and loading step — it does not redeploy any components. After it completes, retry `./src/utils/make-payment.sh`.
+
+**To verify data is present before retrying:**
+```bash
+# Check MifosX has clients in greenbank and bluebank tenants
+./src/utils/view-mifos-transactions.py -c config/config.ini
+
+# Check vNext oracle has MSISDN registrations
+kubectl exec -n vnext -l app=account-lookup-svc -- \
+  curl -s http://localhost:3030/participants/MSISDN/0413356886
+```
 
 ### MifosX Login issue
 
