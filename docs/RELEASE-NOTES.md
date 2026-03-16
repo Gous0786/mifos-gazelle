@@ -112,10 +112,9 @@ Gazelle Scope: (note Payment Hub tickets are independantly logged)<br>
 [GAZ-219 - refactor and simplify Mifos Gazelle scripts undr /src](https://mifosforge.jira.com/browse/GAZ-219)<br>
 [GAZ-220 - remove microk8s install code from mifos gazelle scripts](https://mifosforge.jira.com/browse/GAZ-220)<br>
 [GAZ-221 - ensure Mifos Gazelle deploys to local or remote cluster](https://mifosforge.jira.com/browse/GAZ-221)<br>
-[GAZ-223 - update Mifos GAzelle and MifosX, PHEE to use bitnamilegacy docker repo](https://mifosforge.jira.com/browse/GAZ-223)<br>
+[GAZ-223 - update Mifos Gazelle and MifosX, PHEE to use bitnamilegacy docker repo](https://mifosforge.jira.com/browse/GAZ-223)<br>
 [GAZ-224 - ensure Mifos Gazelle can only use a non-root user for deployment](https://mifosforge.jira.com/browse/GAZ-224)<br>
 [GAZ-225 - Remove Mifos Gazelle -v flag for k8s version](https://mifosforge.jira.com/browse/GAZ-225)<br>
-[GAZ-227 - BUG: commandline.sh allows parameters without preceeding minus sign](https://mifosforge.jira.com/browse/GAZ-227)<br>
 [GAZ-232 - Need to enable local testing and development of Mifos Gazelle components such as PHEE](https://mifosforge.jira.com/browse/GAZ-232)<br>
 [GAZ-233 - Integrate C4GT operations web updates into gazelle environment](https://mifosforge.jira.com/browse/GAZ-233)<br>
 [GAZ-234 - build docker images for all PHEE mifos-v2.0.0](https://mifosforge.jira.com/browse/GAZ-234)<br>
