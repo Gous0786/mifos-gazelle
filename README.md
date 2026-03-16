@@ -33,7 +33,8 @@ sudo ./run.sh -u $USER -m deploy -a all
 | [Local Development](docs/LOCALDEV.md) | hostPath mounts for iterating on Payment Hub EE code |
 | [vNext Standalone](docs/VNEXT-README.md) | Deploy Mojaloop vNext on its own |
 | [Raspberry Pi](docs/RASPBERRY-PI-README.md) | Ubuntu setup on Raspberry Pi 5 |
-| [Release Notes](docs/RELEASE-NOTES.md) | v1.1.0 changes and component versions |
+| [Release Notes](docs/RELEASE-NOTES.md) | v2.0.0 changes and component versions |
+| [PHEE Release History](docs/PHEE-RELEASE-HISTORY.md) | reference for PaymentHub EE component versions  |
 | [Mastercard CBS](docs/mastercard/MASTERCARD.md) | Cross-border payment connector for Payment Hub EE — overview, integration, and quick start |
 | [Mastercard CBS — Operator Guide](docs/mastercard/OPERATOR_DEPLOYMENT_GUIDE.md) | Full config reference, CR spec, operator lifecycle, and troubleshooting |
 

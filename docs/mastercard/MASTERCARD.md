@@ -17,14 +17,14 @@ Without it, Payment Hub EE can route bulk G2P disbursements either through the *
 │  submit-batch.py ──► bulk-processor ──► connector-bulk  │
 │                                               │         │
 │                    ┌──────────────────────────┤         │
-│                    │              │            │         │
+│                    │              │            │        |
 │         payment_mode=   payment_mode=  payment_mode=    │
-│          CLOSEDLOOP      MOJALOOP    MASTERCARD_CBS      │
-│                    │              │            │         │
-│                    ▼              ▼            ▼         │
-│            connector-channel  connector-  connector-     │
-│            (same instance)    mojaloop      mccbs        │
-│                    │              │            │         │
+│          CLOSEDLOOP      MOJALOOP    MASTERCARD_CBS     │
+│                    │              │            │        │
+│                    ▼              ▼            ▼        │
+│            connector-channel  connector-  connector-    │
+│            (same instance)    mojaloop      mccbs       │
+│                    │              │            │        │
 └────────────────────┼──────────────┼────────────┼─────────┘
                      ▼              ▼            ▼
                 (direct debit) Mojaloop vNext  Mastercard

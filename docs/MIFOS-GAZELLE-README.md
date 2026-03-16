@@ -29,15 +29,15 @@
 
 ## Goal of Mifos Gazelle
 
-Mifos Gazelle provides a trivially simple installation and configuration mechanism for a Digital Public Goods DaaS construct — initially MifosX (core banking), Payment Hub EE (payment orchestration), and Mojaloop vNext Beta1 (payment switch). The goal is a rapidly deployable showcase and lab environment that others can build on.
+Mifos Gazelle provides a trivially simple kubernetes based installation for cloud native Digital Public Goods (DPGs) — initially MifosX (core banking), Payment Hub EE (payment orchestration), and Mojaloop vNext Beta1 (payment switch). The goal is a rapidly deployable showcase and lab environment that others can build on.
 
-> **IMPORTANT:** v2.0.0 is recommended for development, test, and demonstration only. Security hardening has not yet occurred.
+> **IMPORTANT:** v2.0.0 is recommended for development, test, and demonstration only. Security hardening has not yet occurred, so it is NOT currently production ready. 
 
 ---
 
 ## Mifos Gazelle Features
 
-- Installs each or all 3 DPGs in a reliable, repeatable way
+- Installs each or all 3 DPGs in a reliable, repeatable and integrated way
 - Bash scripts designed to be readable and modifiable
 - Full installation in ~15 minutes on capable hardware
 - Fully functioning MifosX with multi-tenant support
@@ -50,7 +50,7 @@ Mifos Gazelle provides a trivially simple installation and configuration mechani
 
 - Ubuntu 22.04 or 24.04 LTS (x86_64 or ARM64)
 - 16 GB RAM minimum (less if deploying individual components)
-- 40 GB+ free space in home directory
+- 75 GB+ free space in home directory
 - Non-root user with sudo privileges
 
 ---
@@ -64,7 +64,7 @@ cd mifos-gazelle
 sudo ./run.sh -u $USER -m deploy -a all
 ```
 
-The deployment takes 10–20 minutes. MifosX's Liquibase migrations are the main bottleneck on first boot. See [startup_timeout](#startup_timeout) if deployments time out on slower hardware.
+The deployment takes 10–20 minutes.  See [startup_timeout](#startup_timeout) if deployments time out on slower hardware.
 
 ---
 
@@ -87,12 +87,11 @@ Once `kubectl get pods -A` shows all pods running:
 
 - Start k9s: `~/local/bin/k9s`
 - Inspect MifosX DB: `~/mifos-gazelle/src/utils/mysql-client-mifos.sh`
-- Inspect PaymentHub DB: `~/mifos-gazelle/src/utils/mysql-client-mifos.sh -h operationsmysql.paymenthub.svc.cluster.local -p ethieTieCh8ahv -u root -d mysql`
 - Browse to deployed apps: http://mifos.mifos.gazelle.test, http://vnextadmin.mifos.gazelle.test, http://ops.mifos.gazelle.test
 - DPG documentation:
   - vNext: https://github.com/mojaloop/platform-shared-tools/blob/main/packages/deployment/docker-compose-apps/README.md
   - MifosX: https://docs.mifos.org/core-banking-and-embedded-finance/core-banking
-  - Payment Hub EE: https://mifos.gitbook.io/docs
+  - Payment Hub EE: https://mifos.gitbook.io/docs/payment-hub-ee/business-overview/vision
 - Join the `#mifos-gazelle` channel on [Mifos Slack](https://mifos.slack.com)
 
 ### startup_timeout
