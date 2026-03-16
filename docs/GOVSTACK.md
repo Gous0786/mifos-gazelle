@@ -391,9 +391,57 @@ variables.put(DEBULKINGDFSPID,
 
 ## Tenant Configuration
 
-### Critical: Multi-Component Tenant Configuration
+### Primary Configuration: Helm Chart Properties Files
 
-Tenant workflows must be configured in BOTH bulk-processor AND channel-connector.
+For standard (non-hostPath) deployments, tenant configuration is managed entirely through `.properties` files in the Gazelle Helm chart. These are bundled into a Kubernetes ConfigMap (`ph-ee-config`) at deploy time and injected as Spring Boot configuration into each component.
+
+**Key files:**
+
+| File | Controls |
+|------|---------|
+| `repos/ph_template/helm/gazelle/config/application-tenants.properties` | BPMN workflow mappings per tenant (bulk-processor and connector-channel) |
+| `repos/ph_template/helm/gazelle/config/application-tenantsConnection.properties` | Per-tenant MySQL database connections for operations-app |
+
+The ConfigMap template at `repos/ph_template/helm/gazelle/templates/config.yml` bundles all `config/*.properties` files automatically:
+```yaml
+data:
+{{ (.Files.Glob "config/**.properties").AsConfig | nindent 2 }}
+```
+
+**`application-tenants.properties`** — this is the primary file to edit for tenant workflow configuration:
+```properties
+# Greenbank — Payer using Mojaloop switch
+bpmns.tenants[0].id=greenbank
+bpmns.tenants[0].flows.payment-transfer=PayerFundTransfer-{dfspid}
+bpmns.tenants[0].flows.outbound-transfer-request=minimal_mock_transfer_request-{dfspid}
+bpmns.tenants[0].flows.batch-transactions=bulk_processor-{dfspid}
+bpmns.tenants[0].flows.batch-transactions-govstack=bulk_processor_account_lookup-{dfspid}
+
+# Redbank — Payer using closedloop
+bpmns.tenants[1].id=redbank
+bpmns.tenants[1].flows.payment-transfer=minimal_mock_fund_transfer-{dfspid}
+bpmns.tenants[1].flows.outbound-transfer-request=minimal_mock_transfer_request-{dfspid}
+bpmns.tenants[1].flows.batch-transactions=bulk_processor-{dfspid}
+bpmns.tenants[1].flows.batch-transactions-govstack=bulk_processor_account_lookup-{dfspid}
+
+# Bluebank — Payee FSP
+bpmns.tenants[2].id=bluebank
+bpmns.tenants[2].flows.payment-transfer=minimal_mock_fund_transfer-{dfspid}
+bpmns.tenants[2].flows.batch-transactions=bulk_processor-{dfspid}
+```
+
+To add a new tenant or change a workflow mapping, edit this file and redeploy:
+```bash
+helm upgrade phee repos/ph_template/helm/gazelle -n paymenthub -f config/ph_values.yaml
+```
+
+> **Note:** When using hostPath mounts for local development, the ConfigMap has no effect — changes must be made to the source YAML files and the JAR rebuilt. See [Applying Configuration Changes](#applying-configuration-changes-hostpath-mounts) below.
+
+---
+
+### Multi-Component Detail (hostPath / Development)
+
+When developing with hostPath mounts, the same configuration must be set in two separate source YAML files. The properties file above corresponds to these YAML equivalents:
 
 ### Bulk-Processor Configuration
 
@@ -457,11 +505,9 @@ String tenantId = exchange.getIn().getHeader("Platform-TenantId", String.class);
 // tenantId="redbank" → "minimal_mock_fund_transfer-redbank"
 ```
 
-### Helm Template Configuration (For Reference)
+### Helm Template Configuration
 
-**File:** `repos/ph_template/helm/gazelle/config/application-tenants.properties`
-
-Used by Helm at deploy time. When using hostPath mounts (local dev), changes must be made to the source YAML files above, not this file.
+See [Primary Configuration: Helm Chart Properties Files](#primary-configuration-helm-chart-properties-files) above. For standard deployments, `repos/ph_template/helm/gazelle/config/application-tenants.properties` is the single file to edit — no JAR rebuild required.
 
 ### Applying Configuration Changes (hostPath Mounts)
 
