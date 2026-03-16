@@ -126,6 +126,18 @@ Gazelle Scope: (note Payment Hub tickets are independantly logged)<br>
 [GAZ-259 - Improve deployment resilience](https://mifosforge.jira.com/browse/GAZ-259)<br>
 [GAZ-260 - BUG:Can't login to current web-app on safari and chrome browsers](https://mifosforge.jira.com/browse/GAZ-260)<br>
 
+## Recognition of Significant Contributors
+
+<br>
+Mifos would like to recognise the significant contributions of the following contributors to this release:
+
+ - Tom Daly - [tdaly61](https://github.com/tdaly61)
+ - Devarsh Shah - [devarsh10](https://github.com/devarsh10)
+ - Yash Sharma - [yashsharma127](https://github.com/yashsharma127)
+ - Pranav Deshmukh - [pranav-deshmukh](https://github.com/pranav-deshmukh)
+ - Dipan Dhali - [dipandhali2021](https://github.com/dipandhali2021)
+ - Abhinav Kumar - [abhinav-1305](https://github.com/abhinav-1305)
+ - David Higgins - [DavidH-1](https://github.com/DavidH-1)
 
 <BR>
 <BR>
