@@ -8,7 +8,7 @@ MYSQL_USER="root"
 MYSQL_PASSWORD="mysqlpw"
 MYSQL_HOST="mysql.infra.svc.cluster.local"
 MYSQL_DATABASE="mysql"
-MYSQL_IMAGE="mysql:5.7"
+MYSQL_IMAGE="bitnamilegacy/mysql:5.7"
 
 # Help function
 show_help() {

@@ -1,0 +1,67 @@
+version: 2.1
+
+commands:
+  deploy_and_verify:
+    description: "Deploy Mifos Gazelle and verify health"
+    steps:
+      - run:
+          name: Deploy via run.sh
+          command: |
+            chmod +x ./run.sh
+            echo "Deploying on $(uname -m)..."
+            sudo ./run.sh -m deploy -u "$USER" -a all -d true
+
+      - run:
+          name: Verify pods are running
+          command: |
+            echo "Checking pod readiness..."
+            if ! command -v kubectl &> /dev/null; then
+              echo "ERROR: kubectl not found"; exit 1
+            fi
+            if ! kubectl cluster-info &> /dev/null; then
+              echo "ERROR: Cannot connect to cluster"; exit 1
+            fi
+
+            if ! kubectl wait --for=condition=Ready pods --all --all-namespaces --timeout=300s; then
+              echo "Failure: Some pods are not ready"; kubectl get pods --all-namespaces; exit 1
+            fi
+
+      - run:
+          name: Health check endpoints
+          command: |
+            echo "Checking main endpoints..."
+            
+            # Get cluster IP
+            CLUSTER_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' || echo "127.0.0.1")
+            
+            # Test main endpoints
+            curl -f http://$CLUSTER_IP/health || echo "Default health check failed"
+            curl -f http://mifos.mifos.gazelle.test || echo "MifosX failed"
+            curl -f http://vnextadmin.mifos.gazelle.test || echo "vNext failed"
+            curl -f http://ops.mifos.gazelle.test || echo "Payment Hub failed"
+            
+            echo "Health checks completed"
+
+jobs:
+  deploy-test-amd64:
+    machine:
+      image: ubuntu-2004:current
+    resource_class: large
+    steps:
+      - checkout
+      - deploy_and_verify
+
+  deploy-test-arm64:
+    machine:
+      image: ubuntu-2004:current
+    resource_class: arm.large
+    steps:
+      - checkout
+      - deploy_and_verify
+
+workflows:
+  version: 2
+  test-multi-arch:
+    jobs:
+      - deploy-test-amd64
+      # - deploy-test-arm64

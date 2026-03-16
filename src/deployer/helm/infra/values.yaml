@@ -7,6 +7,10 @@ global:
 kafka:
   enabled: true
   fullnameOverride: "kafka"
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/kafka
+    tag: 3.6.0-debian-11-r0 
   persistence:
     enabled: false
   externalAccess:
@@ -23,9 +27,13 @@ kafka:
         memory: "64Mi" # Using Mi for clarity and consistency
         cpu: "100m"
   
-  extraConfig:
-    autoCreateTopicsEnabled: "true"
-    offsetsTopicReplicationFactor: "1"
+  extraConfig: |
+    auto.create.topics.enable=true
+    offsets.topic.replication.factor=1
+    transaction.state.log.replication.factor=1
+    transaction.state.log.min.isr=1
+    default.replication.factor=1
+    min.insync.replicas=1
 
   # need this to ensure redpanda-console can connect to kafka
   listeners:
@@ -41,6 +49,14 @@ kafka:
   extraEnvVars:
     - name: KAFKA_CFG_ADVERTISED_LISTENERS
       value: PLAINTEXT://kafka:9092
+    # - name: KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+    #   value: "1"
+    # - name: KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR
+    #   value: "1"
+    # - name: KAFKA_CFG_DEFAULT_REPLICATION_FACTOR
+    #   value: "1"
+    # - name: KAFKA_CFG_MIN_INSYNC_REPLICAS
+    #   value: "1"
 
   auth:
     enabled: false
@@ -54,6 +70,10 @@ kafka:
     enabled: true
     persistence:
       enabled: false
+    image:
+      registry: docker.io
+      repository: bitnamilegacy/zookeeper
+      tag: 3.9.1-debian-11-r1
     fullnameOverride: "zookeeper"
     heapOpts: "-Xms64M -Xmx256M"
 
@@ -125,6 +145,8 @@ kafka:
         value: SecurityBcAuthorizationEvents
       - name: SecurityBcEvents
         value: SecurityBcEvents
+      - name: zeebe-export
+        value: zeebe-export
 
     nodeSelector: {}
     tolerations: []
@@ -149,38 +171,12 @@ redpanda-console:
     enabled: true
     className: nginx
     hosts:
-      - host: redpanda-console.mifos.gazelle.test
+      - host: redpanda-console.mifos.gazelle.localhost
         paths:
           - path: /
             pathType: ImplementationSpecific
 
 ############### MongoDB  ####################
-#         older amd64 specific 
-# https://github.com/bitnami/charts/tree/main/bitnami/mongodb
-# mongodb:
-#   enabled: true
-#   image:
-#     tag: 5.0.18-debian-11-r8
-
-#   fullnameOverride: "mongodb"
-#   auth:
-#     enabled: true
-
-#     rootUser: root
-#     rootPassword: mongoDbPas42
-#     usernames:
-#     - 'mojaloop'
-#     passwords:
-#     - 'password'
-#     databases:
-#     - 'mlos'
-
-#     replicaSetKey: ""
-#     existingSecret: ""
-#   persistence:
-#     enabled: false
-################### end of  older gazelle v1.1.0 amd64 only ##############
-
 mongodb:
   enabled: true
   persistence:
@@ -192,6 +188,13 @@ mongodb:
   settings:
     rootUsername: root
     rootPassword: mongoDbPas42
+    
+  extraEnv:
+    - name: MONGO_INITDB_ROOT_USERNAME
+      value: "root"
+    - name: MONGO_INITDB_ROOT_PASSWORD
+      value: "mongoDbPas42"
+
 ############### Mongo Express ####################
 # mongo express config
 mongo-express:
@@ -205,7 +208,7 @@ mongo-express:
     enabled: true
     ingressClassName: nginx
     hosts:
-      - host: mongoexpress.mifos.gazelle.test
+      - host: mongoexpress.mifos.gazelle.localhost
         paths:
           - /
 
@@ -224,6 +227,8 @@ mongo-express:
 ## Reference: https://github.com/bitnami/charts/blob/main/bitnami/redis/values.yaml
 redis:
   enabled: true
+  image:
+    repository: bitnamilegacy/redis
   fullnameOverride: redis
   architecture: standalone
   auth:
@@ -236,7 +241,14 @@ redis:
 ############### Elasticsearch and Kibana  ####################
 elasticsearch:
   enabled: true
-  #fullnameOverride: "fredelastic"
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/elasticsearch
+    tag: 8.10.4-debian-11-r0
+  sysctlImage:
+    registry: docker.io
+    repository: bitnamilegacy/os-shell
+    tag: 11-debian-11-r90
 
   security:
     elasticPassword: elasticSearchPas42
@@ -260,9 +272,9 @@ elasticsearch:
       requests:
         memory: "128Mi"  # Request enough memory for the heap + overhead
         cpu: "100m"
-      limits:
-        memory: "800Mi" # Allow some buffer over the heap for OS page cache and other overhead
-        cpu: "400m" # 
+      # limits:
+      #   memory: "800Mi" # Allow some buffer over the heap for OS page cache and other overhead
+      #   cpu: "41m" # 
 
 
   data:
@@ -275,28 +287,32 @@ elasticsearch:
   ingress:
     enabled: true
     ingressClassName: nginx
-    hostname: elasticsearch.mifos.gazelle.test
+    hostname: elasticsearch.mifos.gazelle.localhost
     tls:
       - enabled: false
 
   kibana:
+    image:
+      registry: docker.io
+      repository: bitnamilegacy/kibana
+      tag: 8.10.4-debian-11-r0
     persistence:
       enabled: false
     env:
       - name: NODE_OPTIONS
-        value: "--max-old-space-size=128" # Set Kibana's JS heap to 128MB 
+        value: "--max-old-space-size=256" # Set Kibana's JS heap to 256MB 
 
     resources:
       requests:
-        memory: "300Mi"  # Request enough memory for the heap + overhead
-        cpu: "200m"
+        memory: "400Mi"  # Request enough memory for the heap + overhead
+        cpu: "400m"
       limits:
         memory: "800Mi" # Allow some buffer over the heap for OS page cache and other overhead
-        cpu: "200m" # 
+        cpu: "400m" # 
     ingress:
       enabled: true
       ingressClassName: nginx
-      hostname: kibana.mifos.gazelle.test
+      hostname: kibana.mifos.gazelle.localhost
       tls:
         enabled: false
 
@@ -312,22 +328,23 @@ mysql:
     # rootPassword: "ethieTieCh8ahv"
   image:
     tag: "5.7"
+    repository: bitnamilegacy/mysql
     debug: false
   initdbScripts:
     setup.sql: |-
-      CREATE DATABASE IF NOT EXISTS messagegateway;
-      CREATE DATABASE IF NOT EXISTS `identity_account_mapper`;
-      CREATE DATABASE IF NOT EXISTS `voucher_management`;
-      CREATE DATABASE IF NOT EXISTS `fineract_tenants`;
-      CREATE DATABASE IF NOT EXISTS `fineract_default`;
-      CREATE DATABASE IF NOT EXISTS `greenbank`;
-      CREATE DATABASE IF NOT EXISTS `bluebank`;
-      GRANT ALL PRIVILEGES ON messagegateway.* TO 'mifos';
-      GRANT ALL PRIVILEGES ON `identity_account_mapper`.* TO 'mifos';
-      GRANT ALL PRIVILEGES ON `voucher_management`.* TO 'mifos';
-      GRANT ALL PRIVILEGES ON `fineract_tenants`.* TO 'mifos';
-      GRANT ALL PRIVILEGES ON `fineract_default`.* TO 'mifos';
-      GRANT ALL PRIVILEGES ON `greenbank`.* TO 'mifos';
-      GRANT ALL PRIVILEGES ON `bluebank`.* TO 'mifos';
+      # CREATE DATABASE IF NOT EXISTS messagegateway;
+      # CREATE DATABASE IF NOT EXISTS `identity_account_mapper`;
+      # CREATE DATABASE IF NOT EXISTS `voucher_management`;
+      # CREATE DATABASE IF NOT EXISTS `fineract_tenants`;
+      # CREATE DATABASE IF NOT EXISTS `fineract_default`;
+      # CREATE DATABASE IF NOT EXISTS `greenbank`;
+      # CREATE DATABASE IF NOT EXISTS `bluebank`;
+      # GRANT ALL PRIVILEGES ON messagegateway.* TO 'mifos';
+      # GRANT ALL PRIVILEGES ON `identity_account_mapper`.* TO 'mifos';
+      # GRANT ALL PRIVILEGES ON `voucher_management`.* TO 'mifos';
+      # GRANT ALL PRIVILEGES ON `fineract_tenants`.* TO 'mifos';
+      # GRANT ALL PRIVILEGES ON `fineract_default`.* TO 'mifos';
+      # GRANT ALL PRIVILEGES ON `greenbank`.* TO 'mifos';
+      # GRANT ALL PRIVILEGES ON `bluebank`.* TO 'mifos';
       GRANT ALL ON *.* TO 'root'@'%';
 

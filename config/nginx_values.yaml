@@ -3,6 +3,7 @@
 ##
 
 controller:
+  watchNamespace: ""
   ingressClassResource:
     name: nginx
   # extraArgs:
