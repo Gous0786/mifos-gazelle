@@ -6,26 +6,29 @@
 - **Payment Hub v2.0.0 preview** - Extensive Updates to Payment Hub EE with a pre-release view, including upgraded UI, tested workflows, GovStack support
 - **config.ini** - Config.ini supported to add configurations to deployments and enable demo setups
 - **Reduced Memory Utilization** - All components now require less than 16GB memory
-- **Data Prepopulation** - for MifosX and PaymentHub EE and VNext to allow for demos
+- **Data Generation and Population** - for MifosX and PaymentHub EE and VNext to allow for demos
 - **Mastercard CBS Connector Demo** - A demo version of the Mastercard CBS Connector which can be configured to connect to the Mastercard Sandbox instance
-- **recent version of the k9s kubernetes utility automatically installed** - in ~/local/bin/k9s 
+- **Updated version of the k9s kubernetes utility automatically installed** - in ~/local/bin/k9s 
 - **Support for installation to local or remote clusters** - support included for deployment to remote clusters
 - **Demo Creator** - Standalone Demo Creator which allows for the creation of demos using Mifos Gazelle components [Mifos Gazelle Demo Creator](https://github.com/openMF/mifos-gazelle-demo-creator)
 - **Demo Runtime** - Standalone Demo Runtime environment that allows guided navigation in demos with Mifos Gazelle components [Mifos Gazelle Demo Runtime](https://github.com/openMF/mifos-gazelle-demo-runtime)
-- **Significant Documentation** - New updated documentation for Bulk operations, config file support, GovStack Operation, Mastercard CBS Demo, PHEE Releases, Raspberry Pi, Postman collections
+- **Significant Documentation** - New updated documentation for Bulk operations, GovStack Operation, Mastercard CBS Demo, PHEE Releases, Raspberry Pi, Postman collections.
 
 
 ## Noteable changes
 - fixes binami issues
+- dockerhub ratelimiting workaround/enhancements
+- Simplified and re-organised deployment scripts supporting modularity
+- Updated Kubernetes to v1.35
 
 ## MifosX Components
 
-### Fineract: v1.11.0
+### Fineract: v1.12.0
 - Image built outside of Mifos infrastructure
 - Exact history and status difficult to determine
 
 ### Mifos Web App
-- **Version**: `dockerhub openmf/web-app:dev-dc1f82e`
+- **Version**: v250621
 - Image built outside of Mifos infrastructure
 - Exact history and status difficult to determine
 
@@ -117,7 +120,7 @@ Gazelle Scope: (note Payment Hub tickets are independantly logged)<br>
 [GAZ-233 - Integrate C4GT operations web updates into gazelle environment](https://mifosforge.jira.com/browse/GAZ-233)<br>
 [GAZ-234 - build docker images for all PHEE mifos-v2.0.0](https://mifosforge.jira.com/browse/GAZ-234)<br>
 [GAZ-235 - update mock-payment-schema to JDK17](https://mifosforge.jira.com/browse/GAZ-235)<br>
-[GAZ-239 - Integrate Demo Creator and Runtime into latest release Gazelle Documenation](https://mifosforge.jira.com/browse/GAZ-239)<br>
+[GAZ-239 - Integrate Demo Creator and Runtime into latest release Gazelle Documentation](https://mifosforge.jira.com/browse/GAZ-239)<br>
 [GAZ-240 - Update Test to most practical Kubernetes/K3s release](https://mifosforge.jira.com/browse/GAZ-240)<br>
 [GAZ-241 - Documentation Review update and tidy](https://mifosforge.jira.com/browse/GAZ-241)<br>
 [GAZ-242 - Testing and fixes in preperation for releases](https://mifosforge.jira.com/browse/GAZ-242)<br>

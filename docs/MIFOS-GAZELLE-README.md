@@ -306,7 +306,7 @@ Mifos Gazelle deploys four default tenants: `default`, `greenbank`, `bluebank` a
 - Helm tests (`helm test phee`) have not been updated to reflect the latest Payment Hub EE changes — WIP, expect failures.
 - Docker Hub rate limits (100 pulls/6 hrs per IP for anonymous users) can cause image pull failures — set credentials in `config/config.ini` under `[dockerhub]` to authenticate. See [FAQ](#docker-hub-rate-limit-errors-during-deployment).
 - On 16GB systems, occasional pod OOM events require a pod restart or re-run
-- Single-node only (no technical barrier; just not yet tested multi-node)
+- Kubernetes Single-node only in Local Mode (no technical barrier; just not yet tested multi-node)
 - Operations-Web can show wrong status for batches while the batch is being processed , check the transfers and once they are all done both batch status and totals should be correct
 - Postman collections not yet fully adapted to Gazelle environment
 - Some issues on older Intel/Opteron hardware with nginx, MongoDB, and ElasticSearch
@@ -408,12 +408,4 @@ kubectl exec -n vnext -l app=account-lookup-svc -- \
 
 If you experience login issues for MifosX UI please refer to these [workaround instructions](./mifosx_workaround/web-app_workaround.md)
 
-<br>
 
----
-## Version Information
-
-- [Release Notes v2.0.0](./RELEASE-NOTES.md)
-- Payment Hub EE: v1.13.0 (https://mifos.gitbook.io/docs/payment-hub-ee/release-notes/v1.13.0)
-- Mojaloop vNext: Beta1
-- MifosX: v 250621 including Apache Fineract v1.11.0 
