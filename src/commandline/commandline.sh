@@ -97,6 +97,8 @@ function loadConfigFromFile() {
     if [[ -n "$config_gazelle_domain" ]]; then GAZELLE_DOMAIN="$config_gazelle_domain"; fi
     local config_gazelle_version=$(crudini --get "$config_path" general GAZELLE_VERSION 2>/dev/null)
     if [[ -n "$config_gazelle_version" ]]; then GAZELLE_VERSION="$config_gazelle_version"; fi
+    local config_startup_timeout=$(crudini --get "$config_path" general startup_timeout 2>/dev/null)
+    if [[ -n "$config_startup_timeout" ]]; then startup_timeout="$config_startup_timeout"; fi
 
     # Read [kubernetes] section
     local config_environment=$(crudini --get "$config_path" kubernetes environment 2>/dev/null)
